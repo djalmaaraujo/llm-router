@@ -1,0 +1,22 @@
+docs/superpowers/specs/2026-09-21-llm-router-go-design.md
+  s_b5cc8d3ae9fb3f::t_4e70fd90b0eaab 276-279
+  s_b5cc8d3ae9fb3f::t_1efc15c99be52c 1-193,195,197,229-275,280-326,332-368
+  s_b5cc8d3ae9fb3f::t_90d0ca86e4d7f8 327-331
+  s_b5cc8d3ae9fb3f::t_acc54d68c12ec0 194,196,198-228
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "24bdf6d4d43b8ac03d2e104345836c67db1d9593",
+  "prompts": {},
+  "sessions": {
+    "s_b5cc8d3ae9fb3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8fd423e0-a587-4ca7-989c-148960173a93",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
