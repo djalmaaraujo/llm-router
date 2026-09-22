@@ -343,6 +343,15 @@ var tapFields = map[string]*regexp.Regexp{
 	"openaiCached": regexp.MustCompile(`"cached_tokens"\s*:\s*(\d+)`),
 }
 
+// anthropicShape matches the KEY NAMES Anthropic's usage object always carries,
+// whatever their values, and which the ChatGPT backend never emits. The wire
+// shape has to be told apart by a key's presence rather than by a non-zero
+// value: ChatGPT echoes tool_usage.image_gen.input_tokens in every frame, so a
+// bare "input_tokens" match would read that decoy as Anthropic usage the moment
+// a turn actually generated an image, skip the OpenAI branch, and silently
+// report a zero cache — which makes every downgrade look free to the policy.
+var anthropicShape = regexp.MustCompile(`"cache_(?:read|creation)_input_tokens"\s*:`)
+
 func firstInt(re *regexp.Regexp, b []byte) int {
 	if m := re.FindSubmatch(b); m != nil {
 		n, _ := strconv.Atoi(string(m[1]))
@@ -361,10 +370,12 @@ func lastInt(re *regexp.Regexp, b []byte) int {
 }
 
 func (t *usageTap) usage() Usage {
-	u := Usage{
-		InputTokens:         firstInt(tapFields["input"], t.head),
-		CacheReadTokens:     firstInt(tapFields["read"], t.head),
-		CacheCreationTokens: firstInt(tapFields["creation"], t.head),
+	var u Usage
+	anthropic := anthropicShape.Match(t.head)
+	if anthropic {
+		u.InputTokens = firstInt(tapFields["input"], t.head)
+		u.CacheReadTokens = firstInt(tapFields["read"], t.head)
+		u.CacheCreationTokens = firstInt(tapFields["creation"], t.head)
 	}
 	// The final count is in the last frame; fall back to the first frame for a
 	// non-streaming response small enough to sit entirely in the head.
@@ -372,8 +383,8 @@ func (t *usageTap) usage() Usage {
 		u.OutputTokens = lastInt(tapFields["output"], t.head)
 	}
 
-	if u.InputTokens == 0 && u.CacheReadTokens == 0 && u.CacheCreationTokens == 0 {
-		// No Anthropic-shaped usage was found in the head at all, so try
+	if !anthropic {
+		// The head carried no Anthropic-shaped usage, so try
 		// OpenAI's shape: its whole usage object lands in the terminal
 		// response.completed frame, normally in the tail, falling back to
 		// the head for a response short enough to sit there whole.

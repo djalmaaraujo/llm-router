@@ -584,3 +584,29 @@ func TestTransportRetainsDefaultBehaviourExceptCompression(t *testing.T) {
 		t.Error("DisableCompression = false, want true so the upstream never compresses a response the usage tap must scan")
 	}
 }
+
+// A ChatGPT-backend turn that actually generated an image echoes a non-zero
+// tool_usage.image_gen.input_tokens in an early frame. Reading that decoy as
+// Anthropic usage would skip the OpenAI branch and report a zero cache, which
+// makes every downgrade look free to the cost policy.
+func TestImageGenTokensAreNotMistakenForAnthropicUsage(t *testing.T) {
+	var tap usageTap
+	tap.Write([]byte(`event: response.created` + "\n" +
+		`data: {"response":{"usage":null,"tool_usage":{"image_gen":{"input_tokens":4096,"output_tokens":1024}}}}` + "\n\n"))
+	tap.Write([]byte("data: " + strings.Repeat("x", 9000) + "\n\n"))
+	tap.Write([]byte(`event: response.completed` + "\n" +
+		`data: {"response":{"usage":{"input_tokens":20953,` +
+		`"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":17152},` +
+		`"output_tokens":375,"total_tokens":21328}}}` + "\n\n"))
+
+	u := tap.usage()
+	if u.CacheReadTokens != 17152 {
+		t.Errorf("CacheReadTokens = %d, want 17152: the image_gen decoy must not suppress the OpenAI branch", u.CacheReadTokens)
+	}
+	if u.CachedTotal() != 20953 {
+		t.Errorf("CachedTotal = %d, want 20953", u.CachedTotal())
+	}
+	if u.CacheCreationTokens != 0 {
+		t.Errorf("CacheCreationTokens = %d, want 0: OpenAI reports no such field", u.CacheCreationTokens)
+	}
+}
