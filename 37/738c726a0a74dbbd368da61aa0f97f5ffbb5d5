@@ -1,0 +1,29 @@
+internal/statusline/wrap.go
+  s_04303831b3d683::t_d3025490e265de 1-88
+internal/launch/claude.go
+  s_04303831b3d683::t_83cd5acd98e301 70-73,75
+internal/launch/claude_test.go
+  s_04303831b3d683::t_e3e060ea207f69 87-100
+internal/statusline/statusline.go
+  s_04303831b3d683::t_d1a4d82e91163b 116,118-127
+internal/statusline/statusline_test.go
+  s_04303831b3d683::t_5f27e94bdb3502 15-19,21-26,34,46,58,70,79,86
+internal/statusline/wrap_test.go
+  s_04303831b3d683::t_1bbe4ced5a71c2 1-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "37738c726a0a74dbbd368da61aa0f97f5ffbb5d5",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
