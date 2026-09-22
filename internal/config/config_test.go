@@ -62,6 +62,18 @@ func TestPricesMatchTheSpec(t *testing.T) {
 	}
 }
 
+func TestEnvFallsBackToTheLegacyJevNames(t *testing.T) {
+	t.Setenv("LLMR_SWITCH_HORIZON", "")
+	t.Setenv("JEV_SWITCH_HORIZON", "7")
+	if got := SwitchHorizon(); got != 7 {
+		t.Errorf("SwitchHorizon = %d, want 7 from JEV_SWITCH_HORIZON", got)
+	}
+	t.Setenv("LLMR_SWITCH_HORIZON", "4")
+	if got := SwitchHorizon(); got != 4 {
+		t.Errorf("SwitchHorizon = %d, want LLMR_ to beat JEV_", got)
+	}
+}
+
 func TestHorizonsAreReadPerCallNotAtInit(t *testing.T) {
 	t.Setenv("LLMR_SWITCH_HORIZON", "")
 	t.Setenv("JEV_SWITCH_HORIZON", "")
