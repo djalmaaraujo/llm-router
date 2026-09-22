@@ -1,0 +1,20 @@
+internal/proxy/claude/parity_test.go
+  s_04303831b3d683::t_c7734fbd051a07 37-39,42-43
+  s_04303831b3d683::t_5b0943494cd23b 44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "29eda1131375c82e0f1960a2eadbd329744c26c5",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
