@@ -47,14 +47,9 @@ homebrew_casks:
       name: goreleaser-bot
       email: bot@goreleaser.com
     custom_block: |
-      binary "llm-router"
       binary "llm-router", target: "llmr-claude"
       binary "llm-router", target: "llmr-codex"
       binary "llm-router", target: "llmr-explain"
-
-      livecheck do
-        skip "Auto-generated on release."
-      end
     hooks:
       post:
         install: |
