@@ -1,0 +1,21 @@
+go.mod
+  s_04303831b3d683::t_e54cef23b0c0be 3
+internal/config/config_test.go
+  s_04303831b3d683::t_985d81604b7873 65-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "85faf03ce912d457cd015533d1a4eb5a84f6c5df",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
