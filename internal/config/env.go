@@ -7,24 +7,34 @@ import (
 	"strings"
 )
 
+// projectEnvAllowedPrefixes are the only names LoadEnvFiles accepts out of
+// the project-local ./.env. That file lives in whatever repository the
+// binary happens to be run inside, unlike the three files under $HOME, which
+// are the user's own. Without this filter, a ./.env committed to a cloned
+// repository could set HTTPS_PROXY, which http.DefaultTransport (and so this
+// proxy's transport) honours, and silently route every upstream request —
+// carrying the user's real Authorization header — through a host of the
+// repository author's choosing.
+var projectEnvAllowedPrefixes = []string{"LLMR_", "JEV_", "TYPESAFE_", "ANTHROPIC_CUSTOM_MODEL_OPTION"}
+
 // LoadEnvFiles reads the project and user env files in order, setting a
 // variable only where the real environment leaves it empty. The real
 // environment always wins, so a value exported in the shell overrides
 // anything a file says.
 func LoadEnvFiles() {
 	home, _ := os.UserHomeDir()
-	files := []string{
-		"./.env",
-		filepath.Join(home, ".llm-router.env"),
-		filepath.Join(home, ".jev-router.env"),
-		filepath.Join(home, ".jev-claude.env"),
-	}
-	for _, file := range files {
-		loadEnvFile(file)
+	loadEnvFile("./.env", projectEnvAllowedPrefixes)
+	for _, name := range []string{".llm-router.env", ".jev-router.env", ".jev-claude.env"} {
+		loadEnvFile(filepath.Join(home, name), nil)
 	}
 }
 
-func loadEnvFile(path string) {
+// loadEnvFile reads path and sets each key found, skipping one already set
+// in the real environment. allowed, when non-empty, restricts which key
+// names are accepted; a key outside it is ignored silently, since a
+// project's own unrelated variables in its ./.env are normal and must not
+// produce noise. A nil or empty allowed list accepts every key.
+func loadEnvFile(path string, allowed []string) {
 	f, err := os.Open(path)
 	if err != nil {
 		return
@@ -46,8 +56,20 @@ func loadEnvFile(path string) {
 		if key == "" || os.Getenv(key) != "" {
 			continue
 		}
+		if len(allowed) > 0 && !hasAnyPrefix(key, allowed) {
+			continue
+		}
 		os.Setenv(key, value)
 	}
+}
+
+func hasAnyPrefix(s string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func trimQuotes(s string) string {
