@@ -21,10 +21,10 @@ type Input struct {
 // means "not reported"; a caller must render that as n/a, never as 0.0, since
 // a fabricated zero would read as "very low complexity" in the report.
 type Metrics struct {
-	TaskComplexity    *float64
-	ReasoningRequired *float64
-	ToolComplexity    *float64
-	ContextSize       *float64
+	TaskComplexity    *float64 `json:"taskComplexity"`
+	ReasoningRequired *float64 `json:"reasoningRequired"`
+	ToolComplexity    *float64 `json:"toolComplexity"`
+	ContextSize       *float64 `json:"contextSize"`
 }
 
 // Decision carries the exact request and response so the report can be
