@@ -1,0 +1,21 @@
+internal/proxy/codex/codex.go
+  s_04303831b3d683::t_edf92fa2a1502a 173-182
+internal/proxy/codex/codex_test.go
+  s_04303831b3d683::t_26aefb13999c91 255-284
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b4713b0bb3dcfdf6527d06d89949904ba4d2fd06",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
