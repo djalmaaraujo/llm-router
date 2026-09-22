@@ -2,11 +2,13 @@ package proxy
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestForwardsUnhandledPathsUntouched(t *testing.T) {
@@ -293,5 +295,139 @@ func TestStartsWithAllHooksNil(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != "ok" {
 		t.Errorf("response = %q", body)
+	}
+}
+
+func TestStripsAcceptEncodingOnBothPaths(t *testing.T) {
+	var seenStreamed, seenBuffered string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			seenBuffered = r.Header.Get("Accept-Encoding")
+			w.Write([]byte(`{}`))
+			return
+		}
+		seenStreamed = r.Header.Get("Accept-Encoding")
+		w.Write([]byte("ok"))
+	}))
+	defer upstream.Close()
+
+	p, _ := Start(upstream.URL, Hooks{
+		RewritesPath:    func(string) bool { return false },
+		BuffersResponse: func(method, path string) bool { return method == "GET" && path == "/v1/models" },
+	})
+	defer p.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, p.URL()+"/v1/messages", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if seenStreamed != "" {
+		t.Errorf("streamed path: Accept-Encoding = %q, want stripped", seenStreamed)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, p.URL()+"/v1/models", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if seenBuffered != "" {
+		t.Errorf("buffered path: Accept-Encoding = %q, want stripped", seenBuffered)
+	}
+}
+
+func TestCancellingTheClientRequestCancelsTheUpstreamCall(t *testing.T) {
+	entered := make(chan struct{})
+	upstreamCtxDone := make(chan struct{})
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(entered)
+		select {
+		case <-r.Context().Done():
+			close(upstreamCtxDone)
+		case <-release:
+			w.Write([]byte("too late"))
+		}
+	}))
+	defer upstream.Close()
+	defer close(release)
+
+	p, _ := Start(upstream.URL, Hooks{RewritesPath: func(string) bool { return false }})
+	defer p.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.URL()+"/v1/messages", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		http.DefaultClient.Do(req)
+		close(done)
+	}()
+
+	// Wait until the request has actually reached the upstream handler
+	// before cancelling, so the cancel races the in-flight call rather than
+	// beating it to the wire.
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("request never reached the upstream handler")
+	}
+
+	cancel()
+	<-done
+
+	select {
+	case <-upstreamCtxDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("upstream request context never became done after the client cancelled")
+	}
+}
+
+func TestPartialStreamReportsIncompleteUsage(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, "event: message_start\ndata: {\"message\":{\"usage\":{\"input_tokens\":12,"+
+			"\"cache_read_input_tokens\":94000,\"cache_creation_input_tokens\":300,\"output_tokens\":1}}}\n\n")
+		w.(http.Flusher).Flush()
+
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Error("test server response writer does not support hijacking")
+			return
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			t.Errorf("hijack: %v", err)
+			return
+		}
+		conn.Close()
+	}))
+	defer upstream.Close()
+
+	got := make(chan Usage, 1)
+	p, _ := Start(upstream.URL, Hooks{
+		RewritesPath:   func(path string) bool { return path == "/v1/messages" },
+		RewriteRequest: func(string, map[string]any) string { return "conv1" },
+		ObserveUsage:   func(key string, u Usage) { got <- u },
+	})
+	defer p.Close()
+
+	resp, err := http.Post(p.URL()+"/v1/messages", "application/json", strings.NewReader(`{"model":"jev-router"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	u := <-got
+	if u.Complete {
+		t.Error("Complete = true, want false after a mid-stream drop")
 	}
 }

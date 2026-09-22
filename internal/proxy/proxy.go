@@ -22,6 +22,10 @@ type Usage struct {
 	CacheReadTokens     int
 	CacheCreationTokens int
 	OutputTokens        int
+	// Complete is true only when the response was read to the end without a
+	// transport error. A mid-stream drop leaves partial numbers in the tap;
+	// those must never be mistaken for a real cache count.
+	Complete bool
 }
 
 // CachedTotal is the whole prefix that will be cached for the next turn.
@@ -92,7 +96,12 @@ func Start(upstream string, h Hooks) (*Server, error) {
 // outgoing *http.Request and its own tap/buffer state: nothing here is
 // shared and mutated across concurrent requests.
 func newHandler(target *url.URL, h Hooks) http.Handler {
-	transport := http.DefaultTransport
+	// DisableCompression: http.Transport otherwise adds its own
+	// Accept-Encoding: gzip whenever the outgoing request has none, and
+	// transparently decompresses the reply. That defeats deleting the
+	// header below — the point is that the upstream must never compress a
+	// response, not that we secretly negotiate and undo it ourselves.
+	transport := &http.Transport{DisableCompression: true}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodHead {
@@ -120,7 +129,11 @@ func newHandler(target *url.URL, h Hooks) http.Handler {
 			key = k
 		}
 
-		outReq, err := http.NewRequest(r.Method, target.String()+r.URL.RequestURI(), bytes.NewReader(outBody))
+		// Tie the outgoing request to the client's context: if the client
+		// disconnects while we are still waiting on a slow first token, this
+		// cancels the upstream call instead of leaking a goroutine and a
+		// connection for a turn nobody is waiting for anymore.
+		outReq, err := http.NewRequestWithContext(r.Context(), r.Method, target.String()+r.URL.RequestURI(), bytes.NewReader(outBody))
 		if err != nil {
 			writeUpstreamError(w, err)
 			return
@@ -129,9 +142,13 @@ func newHandler(target *url.URL, h Hooks) http.Handler {
 		outReq.Host = target.Host
 		outReq.ContentLength = int64(len(outBody))
 		outReq.Header.Del("Content-Length")
-		if buffers {
-			outReq.Header.Del("Accept-Encoding")
-		}
+		// Always strip Accept-Encoding: nothing in this proxy decompresses,
+		// so an upstream that honours it can hand back a gzip stream. The
+		// usageTap then scans compressed bytes with a plaintext regex,
+		// silently reports zero usage, and the router treats zero cache as
+		// "no penalty for switching model" and destroys the prompt cache on
+		// every turn. This must run on both the streamed and buffered path.
+		outReq.Header.Del("Accept-Encoding")
 
 		resp, err := transport.RoundTrip(outReq)
 		if err != nil {
@@ -149,6 +166,11 @@ func newHandler(target *url.URL, h Hooks) http.Handler {
 	})
 }
 
+// cloneHeader copies every header verbatim, including hop-by-hop ones
+// (Connection, Transfer-Encoding, Trailer, Upgrade, Te) that
+// httputil.ReverseProxy would strip. Deliberate: this proxy talks to one
+// known JSON/SSE API and never carries a protocol upgrade or a trailer, so
+// there is nothing here for those headers to break.
 func cloneHeader(h http.Header) http.Header {
 	out := make(http.Header, len(h))
 	for k, v := range h {
@@ -186,10 +208,12 @@ func serveStreamed(w http.ResponseWriter, resp *http.Response, key string, obser
 		dst = io.MultiWriter(fw, tap)
 	}
 
-	io.Copy(dst, resp.Body)
+	_, err := io.Copy(dst, resp.Body)
 
 	if tap != nil {
-		observeUsage(key, tap.usage())
+		u := tap.usage()
+		u.Complete = err == nil
+		observeUsage(key, u)
 	}
 }
 
