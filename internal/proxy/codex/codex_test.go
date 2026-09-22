@@ -89,6 +89,24 @@ func TestDoesNotRouteAContinuation(t *testing.T) {
 	}
 }
 
+// A nil router.Metrics field must survive into state.Status untouched: the
+// handler copies the pointers as given, without dereferencing, so a value
+// Jev did not report renders as n/a rather than a fabricated 0.0.
+func TestPreservesNilMetricsRatherThanFabricatingZero(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	h := New(&fakeRouter{choice: "gpt-5.6-sol", conf: 0.95})
+	b := body(t, strings.Replace(turn, "%s", "design the schema", 1))
+	key := h.Hooks().RewriteRequest("/responses", b)
+
+	got := state.Read(key)
+	if got == nil || got.Metrics == nil {
+		t.Fatal("no metrics recorded")
+	}
+	if got.Metrics.TaskComplexity != nil {
+		t.Errorf("TaskComplexity = %v, want nil preserved as nil, not a fabricated 0.0", *got.Metrics.TaskComplexity)
+	}
+}
+
 // RewritesPath must accept a bare /responses and anything ending in it, since
 // the ChatGPT backend Codex talks through may prefix the path.
 func TestRewritesPathMatchesAnyPathEndingInResponses(t *testing.T) {
