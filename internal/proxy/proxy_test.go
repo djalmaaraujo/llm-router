@@ -1,0 +1,297 @@
+package proxy
+
+import (
+	"bufio"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestForwardsUnhandledPathsUntouched(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, _ := io.ReadAll(r.Body)
+		if string(got) != `{"a":1}` {
+			t.Errorf("body = %q, want it untouched", got)
+		}
+		w.Write([]byte("ok"))
+	}))
+	defer upstream.Close()
+
+	p, err := Start(upstream.URL, Hooks{RewritesPath: func(string) bool { return false }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	resp, err := http.Post(p.URL()+"/v1/other", "application/json", strings.NewReader(`{"a":1}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "ok" {
+		t.Errorf("response = %q", body)
+	}
+}
+
+func TestRewritesTheBodyAndPreservesLargeIntegers(t *testing.T) {
+	var seen string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		seen = string(b)
+		w.Write([]byte("{}"))
+	}))
+	defer upstream.Close()
+
+	p, _ := Start(upstream.URL, Hooks{
+		RewritesPath: func(path string) bool { return path == "/v1/messages" },
+		RewriteRequest: func(_ string, body map[string]any) string {
+			body["model"] = "claude-opus-5"
+			return ""
+		},
+	})
+	defer p.Close()
+
+	http.Post(p.URL()+"/v1/messages", "application/json",
+		strings.NewReader(`{"model":"jev-router","max_tokens":1000000,"ratio":0.30}`))
+
+	if !strings.Contains(seen, `"max_tokens":1000000`) {
+		t.Errorf("large integer was mangled: %s", seen)
+	}
+	if !strings.Contains(seen, `"ratio":0.30`) {
+		t.Errorf("decimal was mangled: %s", seen)
+	}
+	if !strings.Contains(seen, `"model":"claude-opus-5"`) {
+		t.Errorf("rewrite did not apply: %s", seen)
+	}
+}
+
+func TestReadsUsageOffAStreamedResponse(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, "event: message_start\ndata: {\"message\":{\"usage\":{\"input_tokens\":12,"+
+			"\"cache_read_input_tokens\":94000,\"cache_creation_input_tokens\":300,\"output_tokens\":1}}}\n\n")
+		io.WriteString(w, "event: content_block_delta\ndata: {\"delta\":{\"text\":\""+strings.Repeat("x", 9000)+"\"}}\n\n")
+		io.WriteString(w, "event: message_delta\ndata: {\"usage\":{\"output_tokens\":877}}\n\n")
+	}))
+	defer upstream.Close()
+
+	got := make(chan Usage, 1)
+	p, _ := Start(upstream.URL, Hooks{
+		RewritesPath:   func(path string) bool { return path == "/v1/messages" },
+		RewriteRequest: func(string, map[string]any) string { return "conv1" },
+		ObserveUsage:   func(key string, u Usage) { got <- u },
+	})
+	defer p.Close()
+
+	resp, _ := http.Post(p.URL()+"/v1/messages", "application/json", strings.NewReader(`{"model":"jev-router"}`))
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if len(body) < 9000 {
+		t.Fatalf("the tap must not swallow the stream, got %d bytes", len(body))
+	}
+
+	u := <-got
+	if u.CacheReadTokens != 94000 || u.CacheCreationTokens != 300 || u.InputTokens != 12 {
+		t.Errorf("cache usage = %+v", u)
+	}
+	if u.OutputTokens != 877 {
+		t.Errorf("OutputTokens = %d, want the final count from message_delta", u.OutputTokens)
+	}
+	if u.CachedTotal() != 94312 {
+		t.Errorf("CachedTotal = %d, want 94312", u.CachedTotal())
+	}
+}
+
+func TestBuffersTheCatalogResponse(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":[{"id":"claude-opus-5"}]}`))
+	}))
+	defer upstream.Close()
+
+	seen := make(chan []byte, 1)
+	p, _ := Start(upstream.URL, Hooks{
+		RewritesPath:    func(string) bool { return false },
+		BuffersResponse: func(method, path string) bool { return method == "GET" && path == "/v1/models" },
+		ObserveResponse: func(_ string, body []byte) { seen <- body },
+	})
+	defer p.Close()
+
+	resp, _ := http.Get(p.URL() + "/v1/models")
+	io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(<-seen), "claude-opus-5") {
+		t.Error("the catalog must reach ObserveResponse")
+	}
+}
+
+func TestAnswersTheHeadProbe(t *testing.T) {
+	p, _ := Start("http://127.0.0.1:1", Hooks{RewritesPath: func(string) bool { return false }})
+	defer p.Close()
+	resp, err := http.Head(p.URL() + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("HEAD = %d, want 200: Claude Code probes the base URL first", resp.StatusCode)
+	}
+}
+
+func TestAnUpstreamFailureBecomesA502(t *testing.T) {
+	p, _ := Start("http://127.0.0.1:1", Hooks{RewritesPath: func(string) bool { return false }})
+	defer p.Close()
+	resp, err := http.Get(p.URL() + "/v1/messages")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 502 {
+		t.Errorf("status = %d, want 502", resp.StatusCode)
+	}
+}
+
+func TestPreservesA20DigitIntegerThroughARewrite(t *testing.T) {
+	var seen string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		seen = string(b)
+		w.Write([]byte("{}"))
+	}))
+	defer upstream.Close()
+
+	p, _ := Start(upstream.URL, Hooks{
+		RewritesPath: func(path string) bool { return path == "/v1/messages" },
+		RewriteRequest: func(_ string, body map[string]any) string {
+			body["model"] = "claude-opus-5"
+			return ""
+		},
+	})
+	defer p.Close()
+
+	http.Post(p.URL()+"/v1/messages", "application/json",
+		strings.NewReader(`{"model":"jev-router","id":12345678901234567890}`))
+
+	if !strings.Contains(seen, `"id":12345678901234567890`) {
+		t.Errorf("20-digit id was mangled: %s", seen)
+	}
+}
+
+func TestForwardsAnUndecodableBodyUnchanged(t *testing.T) {
+	var seen string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		seen = string(b)
+		w.Write([]byte("{}"))
+	}))
+	defer upstream.Close()
+
+	p, _ := Start(upstream.URL, Hooks{
+		RewritesPath: func(path string) bool { return path == "/v1/messages" },
+		RewriteRequest: func(_ string, body map[string]any) string {
+			body["model"] = "claude-opus-5"
+			return ""
+		},
+	})
+	defer p.Close()
+
+	const notJSON = "not json at all { broken"
+	http.Post(p.URL()+"/v1/messages", "application/json", strings.NewReader(notJSON))
+
+	if seen != notJSON {
+		t.Errorf("undecodable body was not forwarded unchanged: got %q, want %q", seen, notJSON)
+	}
+}
+
+func TestForwardsCredentialsByteForByte(t *testing.T) {
+	const authValue = "Bearer sk-test-secret-value-does-not-change"
+	var seenAuth string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenAuth = r.Header.Get("Authorization")
+		w.Write([]byte("ok"))
+	}))
+	defer upstream.Close()
+
+	p, _ := Start(upstream.URL, Hooks{RewritesPath: func(string) bool { return false }})
+	defer p.Close()
+
+	req, err := http.NewRequest(http.MethodGet, p.URL()+"/v1/messages", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", authValue)
+	req.Header.Set("x-api-key", "should-also-pass-through")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if seenAuth != authValue {
+		t.Errorf("upstream Authorization = %q, want %q", seenAuth, authValue)
+	}
+}
+
+func TestStreamingDeliversTheFirstChunkBeforeTheSecondIsWritten(t *testing.T) {
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		flusher := w.(http.Flusher)
+		io.WriteString(w, "first-chunk\n")
+		flusher.Flush()
+		<-release
+		io.WriteString(w, "second-chunk\n")
+	}))
+	defer upstream.Close()
+
+	p, _ := Start(upstream.URL, Hooks{RewritesPath: func(string) bool { return false }})
+	defer p.Close()
+
+	resp, err := http.Get(p.URL() + "/v1/stream")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("reading first chunk: %v", err)
+	}
+	if line != "first-chunk\n" {
+		t.Fatalf("first chunk = %q", line)
+	}
+
+	close(release)
+
+	line, err = reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("reading second chunk: %v", err)
+	}
+	if line != "second-chunk\n" {
+		t.Fatalf("second chunk = %q", line)
+	}
+}
+
+func TestStartsWithAllHooksNil(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	}))
+	defer upstream.Close()
+
+	p, err := Start(upstream.URL, Hooks{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	resp, err := http.Post(p.URL()+"/v1/messages", "application/json", strings.NewReader(`{"a":1}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "ok" {
+		t.Errorf("response = %q", body)
+	}
+}
