@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/djalmaaraujo/llm-router/internal/config"
 	"github.com/djalmaaraujo/llm-router/internal/explain"
@@ -22,7 +21,7 @@ func main() { os.Exit(run(os.Args)) }
 // first argument.
 func run(argv []string) int {
 	config.LoadEnvFiles()
-	name := strings.TrimSuffix(filepath.Base(argv[0]), ".exe")
+	name := filepath.Base(argv[0])
 	args := argv[1:]
 
 	switch {

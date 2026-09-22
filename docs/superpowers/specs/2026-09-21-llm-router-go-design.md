@@ -261,8 +261,9 @@ almost nothing. The main conversation is the one holding 100 000+ tokens.
 
 The first routed conversation key seen for a session is the main conversation.
 Any new key under that session afterwards is a sub-agent. Sub-agents route with
-a short horizon and no downgrade brake; the main conversation gets the full
-arithmetic.
+a shorter horizon than the main conversation, which makes their downgrade
+brake stricter, not absent: a short-lived context earns switching back sooner,
+so the brake should let go sooner too.
 
 This is the workable form of the sub-agent idea raised on the upstream issue: a
 proxy cannot make Claude Code spawn a sub-agent, but it can stop treating a

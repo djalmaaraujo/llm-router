@@ -48,7 +48,7 @@ func Install() int {
 			fmt.Fprintln(os.Stderr, "[llmr]", err)
 			return 1
 		}
-		fmt.Println("[llmr] wrote", target)
+		fmt.Fprintln(os.Stderr, "[llmr] wrote", target)
 	}
 
 	return 0

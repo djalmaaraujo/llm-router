@@ -35,8 +35,6 @@ type convo struct {
 	cached   int
 	output   int
 	subAgent bool
-	baseline string
-	manual   bool
 }
 
 // Handler holds the per-conversation and per-session state that lets a
