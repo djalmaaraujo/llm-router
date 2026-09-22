@@ -1,0 +1,21 @@
+internal/cost/cost.go
+  s_04303831b3d683::t_bf088b700ee45a 1-43
+internal/cost/cost_test.go
+  s_04303831b3d683::t_4438cfb90dfaad 1-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0832b9926ecdb9467a458465bafe995a9fa9f885",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
