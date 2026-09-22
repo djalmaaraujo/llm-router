@@ -68,6 +68,15 @@ func TestNewTurnPromptIgnoresToolLoopContinuations(t *testing.T) {
 	}
 }
 
+func TestNewTurnPromptSkipsATrailingHookSystemMessage(t *testing.T) {
+	body := decode(t, `{"tools":[{"name":"Read"}],"messages":[
+		{"role":"user","content":[{"type":"text","text":"fix the parser"}]},
+		{"role":"system","content":[{"type":"text","text":"hook additionalContext"}]}]}`)
+	if got := NewTurnPrompt(body); got != "fix the parser" {
+		t.Errorf("got %q, want the trailing hook message skipped", got)
+	}
+}
+
 func TestNewTurnPromptIgnoresAuxiliaryCalls(t *testing.T) {
 	body := decode(t, `{"messages":[{"role":"user","content":"summarise this"}]}`)
 	if got := NewTurnPrompt(body); got != "" {

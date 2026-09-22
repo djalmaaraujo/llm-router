@@ -82,8 +82,22 @@ func NewTurnPrompt(body map[string]any) string {
 		return ""
 	}
 
-	last, ok := messages[len(messages)-1].(map[string]any)
-	if !ok || last["role"] != "user" {
+	// A hook's additionalContext lands as a trailing system-role message
+	// appended after the real turn, so the last message is not always the
+	// one that started it; skip past any trailing system messages to find it.
+	var last map[string]any
+	for i := len(messages) - 1; i >= 0; i-- {
+		m, ok := messages[i].(map[string]any)
+		if !ok {
+			return ""
+		}
+		if m["role"] == "system" {
+			continue
+		}
+		last = m
+		break
+	}
+	if last == nil || last["role"] != "user" {
 		return ""
 	}
 

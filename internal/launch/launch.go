@@ -11,6 +11,15 @@ import (
 	"syscall"
 )
 
+// Codex is a stub until Task 15 replaces it with the real launcher.
+func Codex(args []string) int {
+	fmt.Fprintln(os.Stderr, "llmr-codex arrives in a later task")
+	return 1
+}
+
+// Install is a stub until Task 16 replaces it with the real installer.
+func Install() int { return 0 }
+
 // Resolve finds name on PATH and returns its full path, or an error naming
 // what is missing.
 func Resolve(name string) (string, error) {
