@@ -453,6 +453,66 @@ func TestPartialStreamReportsIncompleteUsage(t *testing.T) {
 	}
 }
 
+func TestReadsUsageOffAnOpenAIResponsesStream(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\",\"status\":\"in_progress\",\"usage\":null}}\n\n")
+		io.WriteString(w, "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n")
+		io.WriteString(w, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"status\":\"completed\",\"usage\":{\"input_tokens\":94012,\"input_tokens_details\":{\"cached_tokens\":94000},\"output_tokens\":877,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":94889}}}\n\n")
+	}))
+	defer upstream.Close()
+
+	got := make(chan Usage, 1)
+	p, _ := Start(upstream.URL, Hooks{
+		RewritesPath:   func(path string) bool { return path == "/v1/responses" },
+		RewriteRequest: func(string, map[string]any) string { return "conv1" },
+		ObserveUsage:   func(key string, u Usage) { got <- u },
+	})
+	defer p.Close()
+
+	resp, _ := http.Post(p.URL()+"/v1/responses", "application/json", strings.NewReader(`{"model":"jev-router"}`))
+	io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	u := <-got
+	if u.CachedTotal() != 94012 {
+		t.Errorf("CachedTotal = %d, want 94012 (the OpenAI-reported total input_tokens, cached_tokens included, not added on top)", u.CachedTotal())
+	}
+	if u.OutputTokens != 877 {
+		t.Errorf("OutputTokens = %d, want 877", u.OutputTokens)
+	}
+}
+
+func TestReadsOpenAIUsageWhenTheTerminalFrameFallsOutsideTheHead(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\",\"status\":\"in_progress\",\"usage\":null}}\n\n")
+		io.WriteString(w, "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\""+strings.Repeat("x", 9000)+"\"}\n\n")
+		io.WriteString(w, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"status\":\"completed\",\"usage\":{\"input_tokens\":150000,\"input_tokens_details\":{\"cached_tokens\":149000},\"output_tokens\":42,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":150042}}}\n\n")
+	}))
+	defer upstream.Close()
+
+	got := make(chan Usage, 1)
+	p, _ := Start(upstream.URL, Hooks{
+		RewritesPath:   func(path string) bool { return path == "/v1/responses" },
+		RewriteRequest: func(string, map[string]any) string { return "conv1" },
+		ObserveUsage:   func(key string, u Usage) { got <- u },
+	})
+	defer p.Close()
+
+	resp, _ := http.Post(p.URL()+"/v1/responses", "application/json", strings.NewReader(`{"model":"jev-router"}`))
+	io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	u := <-got
+	if u.CachedTotal() != 150000 {
+		t.Errorf("CachedTotal = %d, want 150000: the terminal frame is past the 8 KB head and must still be read from the tail", u.CachedTotal())
+	}
+	if u.OutputTokens != 42 {
+		t.Errorf("OutputTokens = %d, want 42", u.OutputTokens)
+	}
+}
+
 func TestTransportRetainsDefaultBehaviourExceptCompression(t *testing.T) {
 	transport := newTransport()
 

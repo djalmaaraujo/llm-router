@@ -3,6 +3,9 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -246,6 +249,43 @@ func TestActiveConversationSurvivesEviction(t *testing.T) {
 
 	if final["model"] != "gpt-5.6-luna" {
 		t.Errorf("model = %v, want the pinned haiku tier to survive 50 unrelated conversations", final["model"])
+	}
+}
+
+// This is the assertion the review flagged as missing: a Codex response,
+// driven through the real proxy tap (not fabricated with mustUsage), must
+// end up recorded as a non-zero cache. Before the tap learned OpenAI's wire
+// shape, this was 0 for every Codex conversation of any size, and every
+// downgrade looked free.
+func TestOpenAIStreamThroughTheProxyTapYieldsANonZeroCache(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	h := New(&fakeRouter{choice: "gpt-5.6-sol", conf: 0.91})
+
+	turnBody := strings.Replace(turn, "%s", "design the schema", 1)
+	key := ConversationKey(body(t, turnBody))
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\",\"status\":\"in_progress\",\"usage\":null}}\n\n")
+		io.WriteString(w, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"status\":\"completed\",\"usage\":{\"input_tokens\":94012,\"input_tokens_details\":{\"cached_tokens\":94000},\"output_tokens\":877}}}\n\n")
+	}))
+	defer upstream.Close()
+
+	p, err := proxy.Start(upstream.URL, h.Hooks())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	resp, err := http.Post(p.URL()+"/responses", "application/json", strings.NewReader(turnBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if got := h.Cached(key); got == 0 {
+		t.Fatal("Cached(key) = 0, want the OpenAI response's cache total to have reached the handler")
 	}
 }
 

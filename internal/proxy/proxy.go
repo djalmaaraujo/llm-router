@@ -291,9 +291,13 @@ func writeUpstreamError(w http.ResponseWriter, err error) {
 }
 
 // usageTap reads token counts out of a response without buffering it or
-// delaying a byte. The cache numbers arrive in the first SSE frame
-// (message_start) and the final output count in the last (message_delta), so
-// it keeps a bounded head and a bounded tail and scans those at the end.
+// delaying a byte. Anthropic's cache numbers arrive in the first SSE frame
+// (message_start) and its final output count in the last (message_delta).
+// OpenAI's Responses API reports usage only once, in the terminal
+// response.completed frame — the earlier response.created frame carries
+// "usage": null — so the whole usage object lands in the last frame there.
+// The tap keeps a bounded head and a bounded tail and scans those at the
+// end, rather than buffering the body or delaying a byte.
 type usageTap struct {
 	head []byte
 	tail []byte
@@ -324,6 +328,10 @@ var tapFields = map[string]*regexp.Regexp{
 	"read":     regexp.MustCompile(`"cache_read_input_tokens"\s*:\s*(\d+)`),
 	"creation": regexp.MustCompile(`"cache_creation_input_tokens"\s*:\s*(\d+)`),
 	"output":   regexp.MustCompile(`"output_tokens"\s*:\s*(\d+)`),
+	// OpenAI-only field: the cached portion of usage.input_tokens, nested
+	// under input_tokens_details. Anthropic never emits this name, so its
+	// presence alone tells the two wire shapes apart.
+	"openaiCached": regexp.MustCompile(`"cached_tokens"\s*:\s*(\d+)`),
 }
 
 func firstInt(re *regexp.Regexp, b []byte) int {
@@ -354,5 +362,29 @@ func (t *usageTap) usage() Usage {
 	if u.OutputTokens = lastInt(tapFields["output"], t.tail); u.OutputTokens == 0 {
 		u.OutputTokens = lastInt(tapFields["output"], t.head)
 	}
+
+	if u.InputTokens == 0 && u.CacheReadTokens == 0 && u.CacheCreationTokens == 0 {
+		// No Anthropic-shaped usage was found in the head at all, so try
+		// OpenAI's shape: its whole usage object lands in the terminal
+		// response.completed frame, normally in the tail, falling back to
+		// the head for a response short enough to sit there whole.
+		// usage.input_tokens is the TOTAL prompt, and cached_tokens is a
+		// subset of it (not additional), so the cached portion is split out
+		// of the total rather than added on top of it — otherwise
+		// CachedTotal, a plain sum of these fields, would double-count it.
+		total := lastInt(tapFields["input"], t.tail)
+		if total == 0 {
+			total = lastInt(tapFields["input"], t.head)
+		}
+		cachedPortion := lastInt(tapFields["openaiCached"], t.tail)
+		if cachedPortion == 0 {
+			cachedPortion = lastInt(tapFields["openaiCached"], t.head)
+		}
+		if total > 0 || cachedPortion > 0 {
+			u.InputTokens = total - cachedPortion
+			u.CacheReadTokens = cachedPortion
+		}
+	}
+
 	return u
 }
