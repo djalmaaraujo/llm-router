@@ -1,0 +1,25 @@
+internal/proxy/proxy_test.go
+  s_04303831b3d683::t_9cbaebdd303335 518-573
+  s_04303831b3d683::t_72631135cc5ca7 9-10
+README.md
+  s_04303831b3d683::t_93a2643ddce1b1 54-56,64,66-72
+internal/proxy/proxy.go
+  s_04303831b3d683::t_1cb94653722dd4 122-128
+  s_04303831b3d683::t_1fe43519c43cce 16-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ebb590f0c02d40298737540fe81a670d3c7385fb",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
