@@ -6,6 +6,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/djalmaaraujo/llm-router/internal/cost"
 )
 
 // Tier is one model tier. Prices are US dollars per million tokens. CacheRead is
@@ -147,4 +149,18 @@ func Env(name string) string {
 		return v
 	}
 	return os.Getenv("JEV_" + name)
+}
+
+// RatesFor turns a tier's list prices into the dollars-per-million-token rates
+// the cost package works in.
+func RatesFor(name string) cost.Rates {
+	tier, ok := Spec(name)
+	if !ok {
+		return cost.Rates{}
+	}
+	return cost.Rates{
+		Read:  tier.CostIn * tier.CacheRead,
+		Write: tier.CostIn * CacheWrite1h,
+		Out:   tier.CostOut,
+	}
 }
