@@ -17,6 +17,8 @@ const anthropicBaseURL = "https://api.anthropic.com"
 // Claude runs Claude Code, routing every turn through the proxy when an API
 // key is available.
 func Claude(args []string) int {
+	Install()
+
 	exe, err := Resolve("claude")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "[llmr] Claude Code is not installed, or `claude` is not on your PATH.")

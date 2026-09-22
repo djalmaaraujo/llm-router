@@ -9,10 +9,50 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/djalmaaraujo/llm-router/skills"
 )
 
-// Install is a stub until Task 16 replaces it with the real installer.
-func Install() int { return 0 }
+// SkillContents returns the embedded explanation skill's contents.
+func SkillContents() []byte {
+	data, err := skills.FS.ReadFile(skills.ExplainSkillPath)
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
+// Install writes the explanation skill into Claude Code's and Codex's skill
+// directories, overwriting whatever is there so an upgrade refreshes it. It
+// prints one line per path written and returns 0, or prints the error and
+// returns 1 on failure.
+func Install() int {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "[llmr]", err)
+		return 1
+	}
+
+	contents := SkillContents()
+	targets := []string{
+		filepath.Join(home, ".claude", "skills", "llmr-explain", "SKILL.md"),
+		filepath.Join(home, ".codex", "skills", "llmr-explain", "SKILL.md"),
+	}
+
+	for _, target := range targets {
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			fmt.Fprintln(os.Stderr, "[llmr]", err)
+			return 1
+		}
+		if err := os.WriteFile(target, contents, 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, "[llmr]", err)
+			return 1
+		}
+		fmt.Println("[llmr] wrote", target)
+	}
+
+	return 0
+}
 
 // Resolve finds name on PATH and returns its full path, or an error naming
 // what is missing.

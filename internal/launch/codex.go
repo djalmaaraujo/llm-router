@@ -23,6 +23,8 @@ const codexProvider = "jev-router"
 // are untouched either way: they live in the user's existing `codex login`
 // session and are simply forwarded.
 func Codex(args []string) int {
+	Install()
+
 	exe, err := Resolve("codex")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "[llmr] Codex is not installed, or `codex` is not on your PATH.")
