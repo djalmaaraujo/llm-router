@@ -1,0 +1,27 @@
+internal/policy/policy_test.go
+  s_04303831b3d683::t_486ad305438781 103
+  s_04303831b3d683::t_1576bfbcb476a3 73-75
+  s_04303831b3d683::t_d01b16bfba693f 43-49
+  s_04303831b3d683::t_7ddfc7d9089cb7 160-161
+  s_04303831b3d683::t_46334beadd372a 152-153,196-207
+  s_04303831b3d683::t_768f2197f30f3e 129-130,135-151
+  s_04303831b3d683::t_3547034e70040e 154
+internal/policy/policy.go
+  s_04303831b3d683::t_11ef06c913d2b3 44-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "53634a67b8681cf9985213777c906ff77f93d94d",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
