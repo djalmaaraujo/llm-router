@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+
+	"github.com/djalmaaraujo/llm-router/internal/log"
 )
 
 // Usage is the token count a response reported, whether read from a
@@ -116,6 +118,13 @@ func newHandler(target *url.URL, h Hooks) http.Handler {
 			return
 		}
 		r.Body.Close()
+
+		if rewrites && r.Method == http.MethodPost {
+			// The raw body as the client sent it, before any rewrite: this
+			// is the wire shape LLMR_DUMP exists to capture, since a future
+			// Claude Code or Codex release can change it without notice.
+			log.Dump(body)
+		}
 
 		var key string
 		outBody := body

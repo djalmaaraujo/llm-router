@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -510,6 +512,62 @@ func TestReadsOpenAIUsageWhenTheTerminalFrameFallsOutsideTheHead(t *testing.T) {
 	}
 	if u.OutputTokens != 42 {
 		t.Errorf("OutputTokens = %d, want 42", u.OutputTokens)
+	}
+}
+
+func TestLLMRDumpWritesTheRawRequestBodyOnARewrittenPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LLMR_DUMP", filepath.Join(dir, "wire"))
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("{}"))
+	}))
+	defer upstream.Close()
+
+	p, _ := Start(upstream.URL, Hooks{
+		RewritesPath: func(path string) bool { return path == "/v1/messages" },
+		RewriteRequest: func(_ string, body map[string]any) string {
+			body["model"] = "claude-opus-5"
+			return ""
+		},
+	})
+	defer p.Close()
+
+	http.Post(p.URL()+"/v1/messages", "application/json", strings.NewReader(`{"model":"jev-router"}`))
+
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("dump dir = %+v, err %v, want exactly one dumped file", entries, err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, entries[0].Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != `{"model":"jev-router"}` {
+		t.Errorf("dumped body = %q, want the raw request as sent, before the rewrite", got)
+	}
+}
+
+func TestLLMRDumpStaysSilentOnAnUnrewrittenPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LLMR_DUMP", filepath.Join(dir, "wire"))
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	}))
+	defer upstream.Close()
+
+	p, _ := Start(upstream.URL, Hooks{RewritesPath: func(string) bool { return false }})
+	defer p.Close()
+
+	http.Post(p.URL()+"/v1/other", "application/json", strings.NewReader(`{"a":1}`))
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("dump dir = %+v, want nothing dumped for a path RewritesPath rejects", entries)
 	}
 }
 

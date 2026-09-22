@@ -51,7 +51,9 @@ For anyone upgrading from `jev-router`, the old files still work: `~/.jev-router
 
 ## Environment variables
 
-All of these take an `LLMR_` prefix, and fall back to the legacy `JEV_` prefix if set:
+All of these take an `LLMR_` prefix, and fall back to the legacy `JEV_` prefix if set,
+except `LLMR_JEV_MODEL`: it is new, has no legacy name, and always reads `LLMR_JEV_MODEL`
+only.
 
 | Variable | Meaning |
 | --- | --- |
@@ -59,10 +61,15 @@ All of these take an `LLMR_` prefix, and fall back to the legacy `JEV_` prefix i
 | `LLMR_ALLOW_FABLE` | Set to `1` to allow routing to the `fable` tier, which bills extra usage credits |
 | `LLMR_SWITCH_HORIZON` | How many more turns a conversation is assumed to keep reusing its cached prefix, when deciding if a downgrade pays off. Default `5` |
 | `LLMR_SUBAGENT_HORIZON` | The same, for a sub-agent, whose context is short-lived. Default `2` |
-| `LLMR_JEV_MODEL` | Overrides the TypeSafe model used to make the routing decision |
+| `LLMR_JEV_MODEL` | Overrides the TypeSafe model used to make the routing decision. No `JEV_` fallback |
 | `LLMR_NO_STATUSLINE` | Set to disable the status line `llmr-claude` adds to Claude Code |
-| `LLMR_DEBUG` | Set to log routing decisions to stderr |
-| `LLMR_DUMP` | A path prefix; when set, each request body is dumped to `<prefix>.<unix millis>.json` |
+| `LLMR_DEBUG` | Set to log routing decisions to `~/.llm-router.log` |
+| `LLMR_DUMP` | A path prefix; when set, each rewritten request body is dumped to `<prefix>.<unix millis>.json`, before the rewrite |
+| `LLMR_CODEX_FAST_MODEL` | Overrides the Codex model slug used for the `haiku` tier |
+| `LLMR_CODEX_BALANCED_MODEL` | Overrides the Codex model slug used for the `sonnet` tier |
+| `LLMR_CODEX_STRONG_MODEL` | Overrides the Codex model slug used for the `opus` tier |
+| `LLMR_CODEX_LONG_MODEL` | Overrides the Codex model slug used for the `fable` tier |
+| `LLMR_STATUS_ID` | The status id `llmr-explain` reports on, when none is given on the command line |
 
 ## The cache rule
 
