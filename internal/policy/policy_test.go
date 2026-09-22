@@ -40,10 +40,13 @@ func TestAnExplicitOverrideBeatsTheRouter(t *testing.T) {
 
 func TestDetectOverrideOnlyFiresOnARealInstruction(t *testing.T) {
 	cases := map[string]string{
-		"switch to opus":         "opus",
-		"use luna":               "haiku",
-		"use strong":             "opus",
-		"the opus of his career": "",
+		"switch to opus":                  "opus",
+		"use luna":                        "haiku",
+		"use strong":                      "opus",
+		"the opus of his career":          "",
+		"on sonnet basis this looks fine": "",
+		"please respond with fast delivery timelines": "",
+		"use haiku to fix this typo":                  "haiku",
 	}
 	for prompt, want := range cases {
 		if got := DetectOverride(prompt); got != want {
@@ -67,8 +70,9 @@ func TestKeepsTheCurrentModelWhenTheRouterIsUnreachable(t *testing.T) {
 func TestIgnoresATierTheRouterInvented(t *testing.T) {
 	in := base()
 	in.Jev = sure("gpt-9")
-	if out := Decide(in); out.Tier != "sonnet" {
-		t.Errorf("got %q, want sonnet", out.Tier)
+	out := Decide(in)
+	if out.Tier != "sonnet" || out.Reason != "jev-unavailable/no-change" || out.Changed {
+		t.Errorf("got %+v, want sonnet/jev-unavailable/no-change, unchanged", out)
 	}
 }
 
@@ -96,7 +100,7 @@ func TestAllowsTheDowngradeThatPaysForItself(t *testing.T) {
 	in.Jev = sure("haiku")
 	in.CachedTokens = 100_000
 	out := Decide(in)
-	if out.Tier != "haiku" {
+	if out.Tier != "haiku" || out.Reason != "jev" || !out.Changed {
 		t.Errorf("opus to haiku at 100k pays off in 2.4 turns, got %+v", out)
 	}
 	if out.BreakEven < 2.3 || out.BreakEven > 2.5 {
@@ -122,8 +126,29 @@ func TestASubAgentSwitchesFreelyBecauseItsCacheIsCheap(t *testing.T) {
 	in.Jev = sure("haiku")
 	in.CachedTokens = 8000
 	in.SubAgent = true
-	if out := Decide(in); out.Tier != "haiku" {
+	out := Decide(in)
+	if out.Tier != "haiku" || out.Reason != "jev" || !out.Changed || out.Horizon != 2 {
 		t.Errorf("a sub-agent with 8k cached should switch, got %+v", out)
+	}
+}
+
+func TestSonnetToHaikuDivergesOnTheSubAgentHorizon(t *testing.T) {
+	in := base()
+	in.Jev = sure("haiku")
+	in.CachedTokens = 20_000
+
+	full := Decide(in)
+	if full.Tier != "haiku" || full.Horizon != 5 {
+		t.Errorf("default horizon 5: got %+v, want haiku at horizon 5", full)
+	}
+	if full.BreakEven < 3 || full.BreakEven > 3.4 {
+		t.Errorf("BreakEven = %.2f, want about 3.17", full.BreakEven)
+	}
+
+	in.SubAgent = true
+	sub := Decide(in)
+	if sub.Tier != "sonnet" || sub.Horizon != 2 || !strings.Contains(sub.Reason, "cache-rebuild") {
+		t.Errorf("sub-agent horizon 2: got %+v, want sonnet held on cache-rebuild", sub)
 	}
 }
 
@@ -132,7 +157,8 @@ func TestAnUpgradeIsNeverBlockedOnCost(t *testing.T) {
 	in.Current = "haiku"
 	in.Jev = sure("opus")
 	in.CachedTokens = 500_000
-	if out := Decide(in); out.Tier != "opus" {
+	out := Decide(in)
+	if out.Tier != "opus" || out.Reason != "jev" || !out.Changed {
 		t.Errorf("an upgrade is a capability decision, got %+v", out)
 	}
 }
@@ -167,7 +193,17 @@ func TestNeverSubstitutesUpwardIntoPaidFable(t *testing.T) {
 	in.Current = "haiku"
 	in.Available = []string{"haiku", "fable"}
 	in.Jev = sure("opus")
-	if out := Decide(in); out.Tier != "haiku" {
-		t.Errorf("got %q, want haiku", out.Tier)
+	out := Decide(in)
+	if out.Tier != "haiku" || out.Reason != "jev+unavailable/no-change" || out.Changed {
+		t.Errorf("got %+v, want haiku/jev+unavailable/no-change, unchanged", out)
+	}
+}
+
+func TestPassesThroughOnEqualRank(t *testing.T) {
+	in := base()
+	in.Jev = sure("sonnet")
+	out := Decide(in)
+	if out.Tier != "sonnet" || out.Reason != "jev/no-change" || out.Changed || out.Horizon != 5 {
+		t.Errorf("got %+v, want sonnet/jev/no-change, unchanged, horizon 5", out)
 	}
 }

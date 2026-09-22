@@ -41,10 +41,10 @@ var overrides = []struct {
 	tier string
 	re   *regexp.Regexp
 }{
-	{"haiku", regexp.MustCompile(`(?i)\b(?:use|switch to|with|on)\s+(?:haiku|fast|luna)\b`)},
-	{"sonnet", regexp.MustCompile(`(?i)\b(?:use|switch to|with|on)\s+(?:sonnet|balanced|terra)\b`)},
-	{"opus", regexp.MustCompile(`(?i)\b(?:use|switch to|with|on)\s+(?:opus|strong|sol)\b`)},
-	{"fable", regexp.MustCompile(`(?i)\b(?:use|switch to|with|on)\s+(?:fable|long|astra)\b`)},
+	{"haiku", regexp.MustCompile(`(?i)\b(?:use|switch to)\s+(?:haiku|fast|luna)\b`)},
+	{"sonnet", regexp.MustCompile(`(?i)\b(?:use|switch to)\s+(?:sonnet|balanced|terra)\b`)},
+	{"opus", regexp.MustCompile(`(?i)\b(?:use|switch to)\s+(?:opus|strong|sol)\b`)},
+	{"fable", regexp.MustCompile(`(?i)\b(?:use|switch to)\s+(?:fable|long|astra)\b`)},
 }
 
 // DetectOverride names the tier the user asked for in the prompt, or "".
