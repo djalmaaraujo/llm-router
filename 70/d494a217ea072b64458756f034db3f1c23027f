@@ -1,0 +1,31 @@
+internal/launch/install_test.go
+  s_04303831b3d683::t_a7b19568c418d2 1-33
+internal/launch/claude.go
+  s_04303831b3d683::t_10351b3bf18380 20-21
+skills/embed.go
+  s_04303831b3d683::t_b4902490fbe4ae 1-12
+internal/launch/launch.go
+  s_04303831b3d683::t_94ceb30ba4fc3d 13,18
+  s_04303831b3d683::t_bcd8d4bbec015a 16-17,19-55
+  s_04303831b3d683::t_716f642a5e602a 12
+internal/launch/codex.go
+  s_04303831b3d683::t_9298c2a357a3aa 26-27
+skills/llmr-explain/SKILL.md
+  s_04303831b3d683::t_ece1705e48bb35 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "70d494a217ea072b64458756f034db3f1c23027f",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
