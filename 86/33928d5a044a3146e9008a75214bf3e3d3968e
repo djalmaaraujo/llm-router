@@ -1,0 +1,29 @@
+README.md
+  s_04303831b3d683::t_55dbe17f4e7727 1-101
+.github/workflows/release.yml
+  s_04303831b3d683::t_550cb44b199839 1-30
+.github/workflows/ci.yml
+  s_04303831b3d683::t_409e9f6e5a2ef2 1-27
+.goreleaser.yaml
+  s_04303831b3d683::t_96873b1725253d 1-48,58-69
+  s_04303831b3d683::t_ae330c990ca353 49-53
+  s_04303831b3d683::t_a52bc6675cca0a 54-57
+LICENSE
+  s_04303831b3d683::t_699465025f6d30 1-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8633928d5a044a3146e9008a75214bf3e3d3968e",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
