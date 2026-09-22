@@ -170,15 +170,16 @@ func (h *Handler) RewriteRequest(_ string, body map[string]any) string {
 		h.mu.Unlock()
 
 		status := state.Status{
-			Tier:      outcome.Tier,
-			Target:    outcome.Target,
-			Model:     decidedModel,
-			Prompt:    prompt,
-			Reason:    outcome.Reason,
-			At:        time.Now().Unix(),
-			BreakEven: outcome.BreakEven,
-			Rebuild:   outcome.Rebuild,
-			Horizon:   outcome.Horizon,
+			Tier:          outcome.Tier,
+			Target:        outcome.Target,
+			Model:         decidedModel,
+			Prompt:        prompt,
+			Reason:        outcome.Reason,
+			At:            time.Now().Unix(),
+			BreakEven:     outcome.BreakEven,
+			Rebuild:       outcome.Rebuild,
+			SavingPerTurn: outcome.SavingPerTurn,
+			Horizon:       outcome.Horizon,
 		}
 		if err == nil && decision != nil {
 			confidence := decision.Confidence

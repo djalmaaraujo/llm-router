@@ -252,6 +252,36 @@ func TestActiveConversationSurvivesEviction(t *testing.T) {
 	}
 }
 
+// Carry-forward 3: policy.Outcome.SavingPerTurn must reach state.Status, the
+// same way it already does on the Claude side. Without it, an explain report
+// prints a rebuild cost and a break-even turn count next to "$0.000 per
+// turn" — three numbers that cannot all be true at once.
+func TestRecordsSavingPerTurnOnADowngrade(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	h := New(&fakeRouter{choice: "gpt-5.6-sol", conf: 0.91})
+
+	pin := body(t, `{"model":"jev-router","prompt_cache_key":"s2","input":[
+		{"type":"additional_tools"},
+		{"role":"user","content":[{"type":"input_text","text":"use opus for this"}]}]}`)
+	key := h.Hooks().RewriteRequest("/responses", pin)
+	h.Hooks().ObserveUsage(key, mustUsage(100000))
+
+	h.route = &fakeRouter{choice: "gpt-5.6-luna", conf: 0.9}
+	again := body(t, `{"model":"jev-router","prompt_cache_key":"s2","input":[
+		{"type":"additional_tools"},
+		{"role":"user","content":[{"type":"input_text","text":"use opus for this"}]},
+		{"role":"user","content":[{"type":"input_text","text":"now something simple"}]}]}`)
+	h.Hooks().RewriteRequest("/responses", again)
+
+	got := readStatus(t, key)
+	if got.Tier != "haiku" {
+		t.Fatalf("tier = %q, want the downgrade to haiku to have paid off", got.Tier)
+	}
+	if got.SavingPerTurn <= 0 {
+		t.Errorf("SavingPerTurn = %v, want a positive per-turn saving alongside BreakEven=%v and Rebuild=%v", got.SavingPerTurn, got.BreakEven, got.Rebuild)
+	}
+}
+
 // This is the assertion the review flagged as missing: a Codex response,
 // driven through the real proxy tap (not fabricated with mustUsage), must
 // end up recorded as a non-zero cache. Before the tap learned OpenAI's wire
