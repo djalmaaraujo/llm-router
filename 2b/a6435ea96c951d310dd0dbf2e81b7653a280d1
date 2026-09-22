@@ -1,0 +1,27 @@
+internal/config/questions.go
+  s_04303831b3d683::t_34172ad8680e5e 1-88
+internal/config/questions_test.go
+  s_04303831b3d683::t_d775818f794584 1-35
+internal/router/jev/jev.go
+  s_04303831b3d683::t_36c3f38e797197 1-143
+internal/router/router.go
+  s_04303831b3d683::t_6ab89ba982dd75 1-40
+internal/router/jev/jev_test.go
+  s_04303831b3d683::t_874dac0fa0b9e6 1-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2ba6435ea96c951d310dd0dbf2e81b7653a280d1",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
