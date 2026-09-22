@@ -31,6 +31,18 @@ The first run of `llmr-claude` or `llmr-codex` also installs a small skill,
 assistant "why did you route to X" and get the report back without spending a routing call
 on the question.
 
+## Building from source
+
+```sh
+./install.sh
+```
+
+Builds and installs `llm-router` plus the three command names into
+`~/.local/bin`. The script removes the existing binary before copying rather
+than overwriting it: macOS ties a code signature to the path, and overwriting
+one in place leaves a stale association that the kernel answers with SIGKILL —
+identical bytes, exit 137, no error message.
+
 ## API key
 
 Get a key from [TypeSafe](https://docs.typesafe.ai), the routing provider, and put it in
