@@ -53,8 +53,9 @@ func ModelFor(tier string) string {
 // request is not the opening request of a turn.
 //
 // An auxiliary call (Codex composing its own prompt, with no tool
-// definitions offered) carries no `additional_tools` item in `input`; that
-// alone rules it out. A genuine turn is then found by walking `input`
+// definitions offered) carries neither top-level `tools` nor the older
+// `additional_tools` input item; that alone rules it out. A genuine turn is
+// then found by walking `input`
 // backwards: a tool-loop continuation ends in a function_call_output or
 // custom_tool_call_output, which must not be routed again. Any other
 // trailing item that is neither of those nor a user turn — a reasoning
@@ -70,7 +71,7 @@ func NewTurnPrompt(body map[string]any) string {
 		return ""
 	}
 
-	if !hasAdditionalTools(input) {
+	if !hasTools(body, input) {
 		return ""
 	}
 
@@ -93,6 +94,13 @@ func NewTurnPrompt(body map[string]any) string {
 		return text
 	}
 	return ""
+}
+
+func hasTools(body map[string]any, input []any) bool {
+	if tools, ok := body["tools"].([]any); ok && len(tools) > 0 {
+		return true
+	}
+	return hasAdditionalTools(input)
 }
 
 func hasAdditionalTools(input []any) bool {

@@ -29,6 +29,14 @@ func TestNewTurnPromptNeedsTheToolsItem(t *testing.T) {
 	}
 }
 
+func TestNewTurnPromptAcceptsTopLevelToolsFromCurrentCodex(t *testing.T) {
+	body := decode(t, `{"tools":[{"type":"function","name":"shell"}],"input":[
+		{"role":"user","content":[{"type":"input_text","text":"fix the parser"}]}]}`)
+	if got := NewTurnPrompt(body); got != "fix the parser" {
+		t.Errorf("got %q, want the user turn when Codex sends tools at the top level", got)
+	}
+}
+
 func TestNewTurnPromptStopsAtAToolOutput(t *testing.T) {
 	body := decode(t, `{"input":[{"type":"additional_tools"},
 		{"role":"user","content":[{"type":"input_text","text":"start"}]},
