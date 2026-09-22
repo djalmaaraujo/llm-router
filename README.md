@@ -4,8 +4,9 @@ Automatic per-turn model routing for Claude Code and OpenAI Codex. `llm-router` 
 work to a cheap model and hard work to a strong one, while keeping each CLI's own interface,
 tools, sessions, permissions, and login untouched.
 
-This is a Go rewrite of the earlier Node project, `jev-router`. It ships as one static binary
-with three command names, installed through Homebrew.
+This is a Go rewrite of, and a derivative work from,
+[`gargpratyush/jev-router`](https://github.com/gargpratyush/jev-router) (MIT). It ships as one
+static binary with three command names, installed through Homebrew.
 
 ## Install
 
