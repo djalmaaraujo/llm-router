@@ -67,27 +67,12 @@ func Claude(args []string) int {
 	return Run(exe, args, env)
 }
 
-// shouldAddStatusLine reports whether llmr-claude should add its own status
-// line: only when the user opted out neither by env var nor by already
-// configuring one themselves.
+// shouldAddStatusLine reports whether llmr-claude should install its status
+// line. A status line the user configured for themselves is no longer a reason
+// to skip: the renderer runs theirs and appends the routing segment, so they
+// keep what they chose. Only an explicit opt-out stops it.
 func shouldAddStatusLine() bool {
-	return config.Env("NO_STATUSLINE") == "" && !hasStatusLine()
-}
-
-// hasStatusLine reports whether the user already configured a status line, in
-// the project or the user settings. Overwriting a deliberate choice silently
-// would be worse than showing no status line at all.
-func hasStatusLine() bool {
-	return definesStatusLine("./.claude/settings.json") || definesStatusLine(UserSettingsPath())
-}
-
-func definesStatusLine(file string) bool {
-	v, ok := readSettings(file)
-	if !ok {
-		return false
-	}
-	_, ok = v["statusLine"]
-	return ok
+	return config.Env("NO_STATUSLINE") == ""
 }
 
 func statusLineSettingsFile() (string, error) {

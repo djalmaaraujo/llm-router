@@ -16,30 +16,6 @@ func TestShouldAddStatusLineWhenNoSettingsFileExistsAnywhere(t *testing.T) {
 	}
 }
 
-func TestShouldAddStatusLineIsFalseWhenTheProjectSettingsDefineOne(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	dir := t.TempDir()
-	t.Chdir(dir)
-
-	writeProjectSettings(t, dir, `{"statusLine":{"type":"command","command":"mine"}}`)
-
-	if shouldAddStatusLine() {
-		t.Error("shouldAddStatusLine = true, want false: the project settings already define one")
-	}
-}
-
-func TestShouldAddStatusLineIsFalseWhenTheUserSettingsDefineOneViaAFakeHome(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Chdir(t.TempDir())
-
-	writeUserSettings(t, home, `{"statusLine":{"type":"command","command":"mine"}}`)
-
-	if shouldAddStatusLine() {
-		t.Error("shouldAddStatusLine = true, want false: the user settings already define one")
-	}
-}
-
 func TestShouldAddStatusLineIsFalseWhenLLMRNoStatuslineIsSet(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Chdir(t.TempDir())
@@ -106,5 +82,19 @@ func writeUserSettings(t *testing.T, home, contents string) {
 	}
 	if err := os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The renderer wraps a status line the user configured rather than replacing
+// it, so its presence is no longer a reason to skip installing ours. Only an
+// explicit opt-out stops it.
+func TestShouldAddStatusLineEvenWhenTheUserConfiguredOne(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Chdir(t.TempDir())
+	writeUserSettings(t, home, `{"statusLine":{"type":"command","command":"printf MINE"}}`)
+
+	if !shouldAddStatusLine() {
+		t.Error("ours must still be installed; the renderer composes with theirs")
 	}
 }

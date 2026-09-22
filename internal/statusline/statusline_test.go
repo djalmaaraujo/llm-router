@@ -12,8 +12,18 @@ func stdin(sessionID string) []byte {
 		`"context_window":{"used_percentage":8.4},"model":{"display_name":"Opus 4.6"}}`)
 }
 
-func TestWaitsBeforeTheFirstPrompt(t *testing.T) {
+// isolate keeps a test off the real machine. Render reads the user's own
+// settings to wrap their status line, so without an isolated HOME and working
+// directory a test would run whatever status line the developer has installed.
+func isolate(t *testing.T) {
+	t.Helper()
 	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	t.Chdir(t.TempDir())
+}
+
+func TestWaitsBeforeTheFirstPrompt(t *testing.T) {
+	isolate(t)
 	got := Render(stdin("s1"))
 	if !strings.Contains(got, "waiting for first prompt") || !strings.Contains(got, "my-project") {
 		t.Errorf("got %q", got)
@@ -21,7 +31,7 @@ func TestWaitsBeforeTheFirstPrompt(t *testing.T) {
 }
 
 func TestShowsTheRoutedModelAndConfidence(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	isolate(t)
 	c := 0.98
 	state.Write("s1", state.Status{Tier: "haiku", Model: "claude-haiku-4-5-20251001", Reason: "jev", Confidence: &c})
 	got := Render(stdin("s1"))
@@ -33,7 +43,7 @@ func TestShowsTheRoutedModelAndConfidence(t *testing.T) {
 }
 
 func TestNilConfidenceOmitsTheProbabilitySegment(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	isolate(t)
 	state.Write("s1", state.Status{Tier: "haiku", Model: "claude-haiku-4-5-20251001", Reason: "jev", Confidence: nil})
 	got := Render(stdin("s1"))
 	if strings.Contains(got, "p=") {
@@ -45,7 +55,7 @@ func TestNilConfidenceOmitsTheProbabilitySegment(t *testing.T) {
 }
 
 func TestNamesTheReasonOnlyWhenRoutingDeclined(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	isolate(t)
 	state.Write("s1", state.Status{Tier: "opus", Model: "claude-opus-5", Reason: "jev"})
 	if strings.Contains(Render(stdin("s1")), "(") && !strings.Contains(Render(stdin("s1")), "p=") {
 		t.Error("the common case must stay short")
@@ -57,7 +67,7 @@ func TestNamesTheReasonOnlyWhenRoutingDeclined(t *testing.T) {
 }
 
 func TestShowsManualControl(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	isolate(t)
 	state.Write("s1", state.Status{Manual: true})
 	got := Render(stdin("s1"))
 	if !strings.Contains(got, "manual") || !strings.Contains(got, "Opus 4.6") {
@@ -66,14 +76,14 @@ func TestShowsManualControl(t *testing.T) {
 }
 
 func TestSurvivesMalformedInput(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	isolate(t)
 	if got := Render([]byte("not json")); got == "" {
 		t.Error("a broken payload must still produce a usable line")
 	}
 }
 
 func TestSurvivesAnEmptyPayload(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	isolate(t)
 	if got := Render([]byte("{}")); got == "" {
 		t.Error("an empty payload must still produce a usable line")
 	}

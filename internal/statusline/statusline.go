@@ -113,6 +113,16 @@ func Render(stdin []byte) string {
 
 	pct := int(math.Round(p.ContextWindow.UsedPercentage))
 
-	return fmt.Sprintf("%s %s·%s %s %s· %d%% context%s",
+	ours := fmt.Sprintf("%s %s·%s %s %s· %d%% context%s",
 		routed(s, p.Model.DisplayName), dim, reset, dirOf(p), dim, pct, reset)
+
+	// A status line the user configured is their own; rather than replace it,
+	// run it and append the routing segment, so they keep what they chose and
+	// still see which model answered.
+	if command := userStatusLine(); command != "" {
+		if theirs := runUserStatusLine(command, stdin); theirs != "" {
+			return theirs + " " + dim + "·" + reset + " " + routed(s, p.Model.DisplayName)
+		}
+	}
+	return ours
 }
