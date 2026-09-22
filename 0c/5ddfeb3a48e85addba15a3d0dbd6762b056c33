@@ -1,0 +1,21 @@
+README.md
+  s_04303831b3d683::t_26a0705851a47d 7-9
+LICENSE
+  s_04303831b3d683::t_36d2e76e51e68f 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0c5ddfeb3a48e85addba15a3d0dbd6762b056c33",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
