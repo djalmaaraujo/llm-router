@@ -262,7 +262,8 @@ func describe(entry map[string]any) string {
 }
 
 // numberString renders a JSON number without scientific notation, whether the
-// decoder produced a json.Number or a plain float64.
+// decoder produced a json.Number or a plain float64. Any other type,
+// including a plain Go int, is dropped rather than rendered wrong.
 func numberString(v any) (string, bool) {
 	switch n := v.(type) {
 	case json.Number:

@@ -223,6 +223,165 @@ func TestModelsFromHandlesShortDatesAndLargeTokenCounts(t *testing.T) {
 	}
 }
 
+func TestApplyTierToleratesMalformedShapes(t *testing.T) {
+	cases := []struct {
+		name  string
+		body  string
+		tier  string
+		check func(t *testing.T, body map[string]any)
+	}{
+		{
+			name: "context_management with no edits key survives untouched",
+			body: `{"model":"jev-router","thinking":{"type":"adaptive"},"context_management":{}}`,
+			tier: "haiku",
+			check: func(t *testing.T, body map[string]any) {
+				cm, ok := body["context_management"].(map[string]any)
+				if !ok {
+					t.Fatal("context_management must survive when it has no edits key")
+				}
+				if len(cm) != 0 {
+					t.Errorf("context_management = %v, want unchanged (empty)", cm)
+				}
+			},
+		},
+		{
+			name: "edits present but not a slice survives untouched",
+			body: `{"model":"jev-router","thinking":{"type":"adaptive"},"context_management":{"edits":"nope"}}`,
+			tier: "haiku",
+			check: func(t *testing.T, body map[string]any) {
+				cm, ok := body["context_management"].(map[string]any)
+				if !ok {
+					t.Fatal("context_management must survive when edits is not a slice")
+				}
+				if cm["edits"] != "nope" {
+					t.Errorf("edits = %v, want left untouched", cm["edits"])
+				}
+			},
+		},
+		{
+			name: "edits is a slice of non-maps: none look like thinking edits, all kept",
+			body: `{"model":"jev-router","thinking":{"type":"adaptive"},"context_management":{"edits":[1,2,3]}}`,
+			tier: "haiku",
+			check: func(t *testing.T, body map[string]any) {
+				cm, ok := body["context_management"].(map[string]any)
+				if !ok {
+					t.Fatal("context_management must survive when its edits are not maps")
+				}
+				edits, ok := cm["edits"].([]any)
+				if !ok || len(edits) != 3 {
+					t.Errorf("edits = %v, want all 3 non-map entries kept, none dropped", cm["edits"])
+				}
+			},
+		},
+		{
+			name: "output_config with no effort key but other fields survives",
+			body: `{"model":"jev-router","output_config":{"foo":"bar"}}`,
+			tier: "haiku",
+			check: func(t *testing.T, body map[string]any) {
+				oc, ok := body["output_config"].(map[string]any)
+				if !ok {
+					t.Fatal("output_config must survive when it has fields besides effort")
+				}
+				if oc["foo"] != "bar" {
+					t.Errorf("output_config = %v, want foo untouched", oc)
+				}
+			},
+		},
+		{
+			name: "an unknown tier leaves the body completely untouched",
+			body: `{"model":"jev-router","thinking":{"type":"adaptive"},"output_config":{"effort":"high"}}`,
+			tier: "nonexistent-tier",
+			check: func(t *testing.T, body map[string]any) {
+				if body["model"] != "jev-router" {
+					t.Errorf("model = %v, want left as jev-router for an unknown tier", body["model"])
+				}
+				if _, ok := body["thinking"]; !ok {
+					t.Error("thinking must survive for an unknown tier")
+				}
+				if _, ok := body["output_config"]; !ok {
+					t.Error("output_config must survive for an unknown tier")
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := decode(t, tc.body)
+			ApplyTier(body, tc.tier, "some-model-id")
+			tc.check(t, body)
+		})
+	}
+}
+
+func TestNewTurnPromptStripsTwoSeparateReminderSpans(t *testing.T) {
+	body := decode(t, `{"tools":[{"name":"Read"}],"messages":[{"role":"user","content":
+		"<system-reminder>first noise</system-reminder>keep this<system-reminder>second noise</system-reminder>"}]}`)
+	if got := NewTurnPrompt(body); got != "keep this" {
+		t.Errorf("got %q, want both reminder spans stripped", got)
+	}
+}
+
+func TestNewTurnPromptStripsAReminderSpanningMultipleLines(t *testing.T) {
+	body := map[string]any{
+		"tools": []any{map[string]any{"name": "Read"}},
+		"messages": []any{
+			map[string]any{
+				"role":    "user",
+				"content": "<system-reminder>line one\nline two\nline three</system-reminder>real prompt",
+			},
+		},
+	}
+	if got := NewTurnPrompt(body); got != "real prompt" {
+		t.Errorf("got %q, want the multi-line reminder stripped completely", got)
+	}
+}
+
+func TestNewTurnPromptPinsUnclosedReminderTagBehaviour(t *testing.T) {
+	body := map[string]any{
+		"tools": []any{map[string]any{"name": "Read"}},
+		"messages": []any{
+			map[string]any{
+				"role":    "user",
+				"content": "  <system-reminder>never closed  ",
+			},
+		},
+	}
+	// The regexp requires a closing tag, so an unclosed opening tag does not
+	// match and is left in the output verbatim; only leading/trailing
+	// whitespace around it is trimmed. Pinning this so a change is deliberate.
+	if got := NewTurnPrompt(body); got != "<system-reminder>never closed" {
+		t.Errorf("got %q, want the unclosed tag left in place, only trimmed", got)
+	}
+}
+
+func TestNewTurnPromptReturnsEmptyForNonStringNonArrayContent(t *testing.T) {
+	body := map[string]any{
+		"tools": []any{map[string]any{"name": "Read"}},
+		"messages": []any{
+			map[string]any{
+				"role":    "user",
+				"content": 42,
+			},
+		},
+	}
+	if got := NewTurnPrompt(body); got != "" {
+		t.Errorf("got %q, want empty for content that is neither a string nor an array", got)
+	}
+}
+
+func TestSessionOfHandlesMetadataAndSessionIDShapeMismatches(t *testing.T) {
+	notAMap := decode(t, `{"metadata":"not-a-map"}`)
+	if got := SessionOf(notAMap); got != "" {
+		t.Errorf("got %q, want empty when metadata is not a map", got)
+	}
+
+	sessionIDIsNumber := decode(t, `{"metadata":{"user_id":"{\"session_id\":42}"}}`)
+	if got := SessionOf(sessionIDIsNumber); got != "" {
+		t.Errorf("got %q, want empty when session_id is a JSON number rather than a string", got)
+	}
+}
+
 func TestSanitizeSchemaRecursesDeeplyAndToleratesNil(t *testing.T) {
 	SanitizeSchema(nil)
 
