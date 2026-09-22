@@ -82,3 +82,30 @@ func captureOutput(t *testing.T, target **os.File) func() string {
 		return <-done
 	}
 }
+
+// Both launchers call Install on every start. Announcing a write that did not
+// happen puts two lines of chatter ahead of every answer.
+func TestInstallIsQuietWhenTheSkillIsAlreadyCurrent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if code := Install(); code != 0 {
+		t.Fatalf("first Install returned %d", code)
+	}
+	path := filepath.Join(home, ".claude", "skills", "llmr-explain", "SKILL.md")
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if code := Install(); code != 0 {
+		t.Fatalf("second Install returned %d", code)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !before.ModTime().Equal(after.ModTime()) {
+		t.Error("an unchanged skill must not be rewritten")
+	}
+}

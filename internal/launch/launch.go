@@ -1,6 +1,7 @@
 package launch
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -43,6 +44,12 @@ func Install() int {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			fmt.Fprintln(os.Stderr, "[llmr]", err)
 			return 1
+		}
+		// Both launchers call Install on every start, so an unconditional
+		// write would announce itself on every single launch. Only an actual
+		// change is worth a line.
+		if existing, err := os.ReadFile(target); err == nil && bytes.Equal(existing, contents) {
+			continue
 		}
 		if err := os.WriteFile(target, contents, 0o644); err != nil {
 			fmt.Fprintln(os.Stderr, "[llmr]", err)
