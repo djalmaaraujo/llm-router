@@ -1,0 +1,21 @@
+internal/proxy/codex/body.go
+  s_d019c70be9e2f9::t_0c5b5a873a7e52 56-58,74,99-105
+internal/proxy/codex/body_test.go
+  s_d019c70be9e2f9::t_1808cc045baade 32-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bf11ffa5a32582743c75ad3e2d2cfe3e4f594411",
+  "prompts": {},
+  "sessions": {
+    "s_d019c70be9e2f9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0c973-4db9-7831-a6fb-804543a03c74",
+        "model": "unknown"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
