@@ -166,7 +166,12 @@ func TestSessionIDSanitiserDefeatsHostileShapes(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("TMPDIR", t.TempDir())
+			root := t.TempDir()
+			deep := filepath.Join(root, "a", "b", "c")
+			if err := os.MkdirAll(deep, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("TMPDIR", deep)
 
 			func() {
 				defer func() {
@@ -188,7 +193,10 @@ func TestSessionIDSanitiserDefeatsHostileShapes(t *testing.T) {
 				return
 			}
 
-			err := filepath.Walk(filepath.Dir(Dir()), func(p string, info os.FileInfo, err error) error {
+			// root sits above deep/llm-router by three levels, so an
+			// escape of one, two or three ".." segments still lands
+			// somewhere this walk can see.
+			err := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
 				if err != nil || info.IsDir() {
 					return nil
 				}
