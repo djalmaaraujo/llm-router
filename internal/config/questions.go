@@ -43,7 +43,7 @@ var guidance = map[string]map[string]any{
 // relativeCost ranks a tier's price in words rather than numbers. Jev's
 // published limitations say it cannot reliably do arithmetic or judge numeric
 // proximity, so a number here would ask it to do the one thing it is
-// documented to fail at.
+// documented to fail at: https://docs.typesafe.ai/model-jaggedness/jev-1.13
 var relativeCost = map[string]string{
 	"haiku":  "lowest",
 	"sonnet": "low",
