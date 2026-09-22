@@ -1,0 +1,21 @@
+internal/explain/explain.go
+  s_04303831b3d683::t_e5513ec57abc14 155-158
+internal/explain/explain_test.go
+  s_04303831b3d683::t_a8e72095971e89 178-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7a2262c172c7116cdffa6e64662a7aaebe732044",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
