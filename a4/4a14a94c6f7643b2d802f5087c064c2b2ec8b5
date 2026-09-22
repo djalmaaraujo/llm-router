@@ -1,0 +1,21 @@
+internal/proxy/claude/body.go
+  s_04303831b3d683::t_2e47bb3c05a3d6 18-31,142
+internal/proxy/claude/body_test.go
+  s_04303831b3d683::t_c7a938c45b9905 435-453
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a44a14a94c6f7643b2d802f5087c064c2b2ec8b5",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
