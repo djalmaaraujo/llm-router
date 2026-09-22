@@ -152,7 +152,10 @@ func Render(s *state.Status) string {
 	lines = append(lines, row("Tool complexity     "+metric(toolComplexity)))
 	lines = append(lines, row("Context size        "+metric(contextSize)))
 	lines = append(lines, row(""))
-	lines = append(lines, row("Selected model: "+strings.ToUpper(firstNonEmpty(s.Model, "unknown"))))
+	// Wrapped, not a single row: a full model id such as
+	// claude-haiku-4-5-20251001 overflows the box, and a truncated id names no
+	// model at all - the one thing this line exists to say.
+	lines = append(lines, wrapped("Selected model: ", strings.ToUpper(firstNonEmpty(s.Model, "unknown")))...)
 	lines = append(lines, row("Confidence: "+confidence(s.Confidence)))
 	lines = append(lines, "└"+strings.Repeat("─", width)+"┘")
 

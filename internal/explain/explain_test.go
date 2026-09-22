@@ -175,3 +175,13 @@ func TestSurvivesAHostileStatus(t *testing.T) {
 		t.Errorf("expected metrics to render as n/a:\n%s", got)
 	}
 }
+
+// A full model id is longer than the box is wide. Truncating it to
+// CLAUDE-HAIKU-4- names no model at all, which is the one thing this line
+// exists to say.
+func TestLongModelIDIsWrappedNotTruncated(t *testing.T) {
+	got := Render(&state.Status{Tier: "haiku", Model: "claude-haiku-4-5-20251001", Reason: "jev"})
+	if !strings.Contains(got, "20251001") {
+		t.Errorf("the model id was truncated; the report must show all of it:\n%s", got)
+	}
+}
