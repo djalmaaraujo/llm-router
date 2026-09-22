@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -118,13 +119,25 @@ func TestUsageFeedsTheNextDecision(t *testing.T) {
 	}
 }
 
+// Minor 5: assert the exact model kept, not merely that some real tier came
+// back — a wrong-but-real tier would have passed the old assertion.
 func TestRouterFailureKeepsTheCurrentModel(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	h := New(&fakeRouter{err: context.DeadlineExceeded})
-	b := body(t, strings.Replace(turn, "%s", "anything", 1))
+
+	pin := body(t, strings.Replace(turn, "%s", "use sonnet for this one", 1))
+	h.Hooks().RewriteRequest("/v1/messages", pin)
+	if pin["model"] != "claude-sonnet-5" {
+		t.Fatalf("setup: pinned model = %v, want claude-sonnet-5", pin["model"])
+	}
+
+	b := body(t, `{"model":"jev-router","tools":[{"name":"Read"}],
+		"metadata":{"user_id":"{\"session_id\":\"s1\"}"},
+		"messages":[{"role":"user","content":"use sonnet for this one"},
+			{"role":"user","content":"now something else entirely"}]}`)
 	h.Hooks().RewriteRequest("/v1/messages", b)
-	if config.TierOf(b["model"].(string)) == "" {
-		t.Errorf("model = %v, want a real model even when routing failed", b["model"])
+	if b["model"] != "claude-sonnet-5" {
+		t.Errorf("model = %v, want the pinned claude-sonnet-5 kept when routing fails", b["model"])
 	}
 }
 
@@ -213,6 +226,132 @@ func TestPreservesNilMetricsRatherThanFabricatingZero(t *testing.T) {
 	}
 	if got.Metrics.TaskComplexity != nil {
 		t.Errorf("TaskComplexity = %v, want nil preserved as nil, not a fabricated 0.0", *got.Metrics.TaskComplexity)
+	}
+}
+
+// Fix round 1, Critical 1: a fresh conversation has no cache to protect, so
+// its Current must reach policy.Decide as "", not the internal "opus" guess
+// used for ApplyTier and the router's own Current. Passing the opus guess
+// into policy made a low-confidence downgrade look like a downgrade FROM
+// opus, tripping low-confidence-no-downgrade and sticking on opus for no
+// reason at all.
+func TestFreshConversationLowConfidenceAnswerDoesNotDefaultToOpus(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	h := New(&fakeRouter{choice: "claude-haiku-4-5-20251001", conf: 0.2})
+	b := body(t, strings.Replace(turn, "%s", "anything", 1))
+	h.Hooks().RewriteRequest("/v1/messages", b)
+
+	if b["model"] == "claude-opus-5" {
+		t.Errorf("model = %v, want a fresh conversation's low-confidence answer to not default to opus", b["model"])
+	}
+	if b["model"] != "claude-haiku-4-5-20251001" {
+		t.Errorf("model = %v, want claude-haiku-4-5-20251001: nothing pinned yet, so no downgrade guard applies", b["model"])
+	}
+}
+
+// Fix round 1, Critical 2: a conversation still being looked up (mid tool
+// loop) must move to the back of the eviction order on every access, or 50
+// unrelated conversations churning past it can evict it out from under an
+// active task even though it was just used.
+func TestActiveConversationSurvivesEviction(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	h := New(&fakeRouter{choice: "claude-opus-5", conf: 0.95})
+
+	pinFirstMessage := "use haiku for this one"
+	pin := body(t, strings.Replace(turn, "%s", pinFirstMessage, 1))
+	h.Hooks().RewriteRequest("/v1/messages", pin)
+	if pin["model"] != "claude-haiku-4-5-20251001" {
+		t.Fatalf("setup: pinned model = %v, want haiku", pin["model"])
+	}
+
+	continuation := func() map[string]any {
+		return body(t, fmt.Sprintf(`{"model":"jev-router","tools":[{"name":"Read"}],
+			"metadata":{"user_id":"{\"session_id\":\"s1\"}"},
+			"messages":[{"role":"user","content":%q},
+				{"role":"user","content":[{"type":"tool_result","tool_use_id":"x"}]}]}`, pinFirstMessage))
+	}
+
+	for i := 0; i < 50; i++ {
+		other := body(t, fmt.Sprintf(`{"model":"jev-router","tools":[{"name":"Read"}],
+			"metadata":{"user_id":"{\"session_id\":\"other-%d\"}"},
+			"messages":[{"role":"user","content":"unrelated task %d"}]}`, i, i))
+		h.Hooks().RewriteRequest("/v1/messages", other)
+
+		// The pinned conversation is still mid tool loop: it keeps receiving
+		// continuations while the 50 unrelated conversations churn through.
+		mid := continuation()
+		h.Hooks().RewriteRequest("/v1/messages", mid)
+	}
+
+	final := continuation()
+	h.Hooks().RewriteRequest("/v1/messages", final)
+
+	if final["model"] != "claude-haiku-4-5-20251001" {
+		t.Errorf("model = %v, want the pinned haiku tier to survive 50 unrelated conversations", final["model"])
+	}
+}
+
+// Minor 6a: Claude Code's own cheap auxiliary calls (a concrete model, no
+// tools) must never flip an existing status to manual.
+func TestAuxiliaryCallWithoutToolsDoesNotWriteManualStatus(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	h := New(&fakeRouter{choice: "claude-opus-5", conf: 0.95})
+
+	routed := body(t, strings.Replace(turn, "%s", "design the schema", 1))
+	h.Hooks().RewriteRequest("/v1/messages", routed)
+
+	before := state.Read("s1")
+	if before == nil || before.Manual {
+		t.Fatal("setup: expected a non-manual status recorded")
+	}
+
+	aux := body(t, `{"model":"claude-haiku-4-5-20251001",
+		"metadata":{"user_id":"{\"session_id\":\"s1\"}"},"messages":[{"role":"user","content":"cheap aux call"}]}`)
+	h.Hooks().RewriteRequest("/v1/messages", aux)
+
+	after := state.Read("s1")
+	if after == nil || after.Manual {
+		t.Error("an auxiliary call with no tools must not flip the status line to manual")
+	}
+}
+
+// Minor 6b: claude -p omits metadata on a session's first request; without
+// the conversation-key fallback the decision would be silently dropped.
+func TestEmptySessionIDFilesUnderTheConversationKey(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	h := New(&fakeRouter{choice: "claude-opus-5", conf: 0.95})
+	b := body(t, `{"model":"jev-router","tools":[{"name":"Read"}],
+		"messages":[{"role":"user","content":"claude -p one-shot"}]}`)
+	key := h.Hooks().RewriteRequest("/v1/messages", b)
+	if key == "" {
+		t.Fatal("expected a correlation key")
+	}
+	if got := state.Read(key); got == nil {
+		t.Error("with no session id, the decision must be filed under the conversation key")
+	}
+}
+
+// Important 4 (disclosed, not fixed this round): under `claude --resume`, a
+// sub-agent whose opening request reaches the handler before the main
+// conversation's own first routed request is recorded as that session's
+// main, and the true main conversation is then mislabelled a sub-agent —
+// which hands it the short horizon meant for throwaway work. This test
+// documents the known behaviour so it is not "fixed" by accident.
+func TestResumedSessionCanMisclassifyTheMainConversationAsASubAgent(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	h := New(&fakeRouter{choice: "claude-opus-5", conf: 0.95})
+
+	subAgentArrivesFirst := body(t, strings.Replace(turn, "%s", "sub-agent's own first prompt", 1))
+	h.Hooks().RewriteRequest("/v1/messages", subAgentArrivesFirst)
+
+	mainArrivesSecond := body(t, strings.Replace(turn, "%s", "the resumed session's real first prompt", 1))
+	h.Hooks().RewriteRequest("/v1/messages", mainArrivesSecond)
+
+	if h.IsSubAgent(ConversationKey(subAgentArrivesFirst)) {
+		t.Error("known limitation: whichever key arrives first under a session is recorded as main")
+	}
+	if !h.IsSubAgent(ConversationKey(mainArrivesSecond)) {
+		t.Error("known limitation: the true main conversation is mislabelled a sub-agent when it arrives second")
 	}
 }
 

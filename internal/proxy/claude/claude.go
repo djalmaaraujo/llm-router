@@ -101,18 +101,31 @@ func (h *Handler) RewriteRequest(_ string, body map[string]any) string {
 		c = &convo{}
 		h.registerConvo(key, c)
 		h.registerSession(sessionID, key, c)
+	} else {
+		// A conversation still being looked up is still in use, however long
+		// ago it was created; move it to the back so 50 unrelated
+		// conversations churning through cannot evict it out from under an
+		// active tool loop.
+		h.touch(key)
 	}
-	currentTier := c.tier
-	if currentTier == "" {
-		currentTier = defaultTier
-	}
-	currentModel := c.model
+	pinnedTier := c.tier
+	pinnedModel := c.model
 	cached, output, subAgent := c.cached, c.output, c.subAgent
 	models := h.availableModelsLocked()
 	h.mu.Unlock()
 
-	if currentModel == "" {
-		currentModel = config.IDOf(currentTier)
+	// routerTier/routerModel are only what gets SENT to the router and, when
+	// nothing better exists yet, ApplyTier: a concrete starting point, guessed
+	// high because that is what the prompt cache was most likely built on.
+	// pinnedTier stays "" for policy.Decide below when nothing is pinned yet,
+	// since a fresh conversation has no cache at all to protect.
+	routerTier := pinnedTier
+	if routerTier == "" {
+		routerTier = defaultTier
+	}
+	routerModel := pinnedModel
+	if routerModel == "" {
+		routerModel = config.IDOf(routerTier)
 	}
 
 	// An empty prompt means a tool-loop continuation, not a new turn.
@@ -123,10 +136,13 @@ func (h *Handler) RewriteRequest(_ string, body map[string]any) string {
 	prompt := NewTurnPrompt(body)
 	fresh := prompt != "" && !strings.Contains(prompt, "<jev-explain>")
 
+	var pending *state.Status
+	var writeKey string
+
 	if fresh {
 		decision, err := h.route.Route(context.Background(), router.Input{
 			Prompt:        prompt,
-			Current:       currentModel,
+			Current:       routerModel,
 			ContextTokens: cached,
 			Models:        models,
 		})
@@ -141,7 +157,7 @@ func (h *Handler) RewriteRequest(_ string, body map[string]any) string {
 		outcome := policy.Decide(policy.Input{
 			Prompt:       prompt,
 			Jev:          answer,
-			Current:      currentTier,
+			Current:      pinnedTier,
 			Available:    config.AvailableTiers(),
 			CachedTokens: cached,
 			OutputTokens: output,
@@ -182,7 +198,8 @@ func (h *Handler) RewriteRequest(_ string, body map[string]any) string {
 		if sessionKey == "" {
 			sessionKey = key
 		}
-		state.WriteDecision(sessionKey, status)
+		pending = &status
+		writeKey = sessionKey
 
 		log.Debug("routed key=%s tier=%s reason=%s", key, outcome.Tier, outcome.Reason)
 	}
@@ -198,6 +215,14 @@ func (h *Handler) RewriteRequest(_ string, body map[string]any) string {
 	// The sentinel is not a real model id, so every routed request must be
 	// rewritten, including continuations that reuse the turn's pinned tier.
 	ApplyTier(body, tier, modelID)
+
+	// Recorded only once the tier is final, so the status on disk always
+	// matches what was actually applied to the request.
+	if pending != nil {
+		pending.Tier = tier
+		pending.Model = modelID
+		state.WriteDecision(writeKey, *pending)
+	}
 
 	return key
 }
@@ -276,6 +301,18 @@ func (h *Handler) registerConvo(key string, c *convo) {
 	}
 	h.convos[key] = c
 	h.order = append(h.order, key)
+}
+
+// touch moves key to the back of the eviction order, marking it as the most
+// recently used. Callers must hold h.mu.
+func (h *Handler) touch(key string) {
+	for i, k := range h.order {
+		if k == key {
+			h.order = append(h.order[:i], h.order[i+1:]...)
+			h.order = append(h.order, key)
+			return
+		}
+	}
 }
 
 // registerSession marks c as a sub-agent when key is not the first
