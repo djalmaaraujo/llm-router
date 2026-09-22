@@ -15,7 +15,20 @@ import (
 	"github.com/djalmaaraujo/llm-router/internal/config"
 )
 
-var systemReminder = regexp.MustCompile(`(?s)<system-reminder>.*?</system-reminder>`)
+// Blocks the CLI injects into the user's message that are noise to a router.
+// system-reminder carries harness instructions; the local-command family
+// carries the text of a slash command the user ran just before typing, and on
+// a turn that follows one, that noise is most of the message. Judging it
+// alongside the real request measurably blunts the answer, and several of the
+// blocks talk about models and configuration - the exact subject most likely
+// to mislead a complexity judgement.
+var injectedBlocks = regexp.MustCompile(`(?s)<system-reminder>.*?</system-reminder>` +
+	`|<local-command-caveat>.*?</local-command-caveat>` +
+	`|<local-command-stdout>.*?</local-command-stdout>` +
+	`|<local-command-stderr>.*?</local-command-stderr>` +
+	`|<command-name>.*?</command-name>` +
+	`|<command-message>.*?</command-message>` +
+	`|<command-args>.*?</command-args>`)
 
 var boundPairs = [][2]string{
 	{"exclusiveMinimum", "minimum"},
@@ -126,7 +139,7 @@ func NewTurnPrompt(body map[string]any) string {
 		return ""
 	}
 
-	text = systemReminder.ReplaceAllString(text, "")
+	text = injectedBlocks.ReplaceAllString(text, "")
 	return strings.TrimSpace(text)
 }
 
