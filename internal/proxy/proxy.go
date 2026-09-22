@@ -96,12 +96,7 @@ func Start(upstream string, h Hooks) (*Server, error) {
 // outgoing *http.Request and its own tap/buffer state: nothing here is
 // shared and mutated across concurrent requests.
 func newHandler(target *url.URL, h Hooks) http.Handler {
-	// DisableCompression: http.Transport otherwise adds its own
-	// Accept-Encoding: gzip whenever the outgoing request has none, and
-	// transparently decompresses the reply. That defeats deleting the
-	// header below — the point is that the upstream must never compress a
-	// response, not that we secretly negotiate and undo it ourselves.
-	transport := &http.Transport{DisableCompression: true}
+	transport := newTransport()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodHead {
@@ -171,6 +166,20 @@ func newHandler(target *url.URL, h Hooks) http.Handler {
 // httputil.ReverseProxy would strip. Deliberate: this proxy talks to one
 // known JSON/SSE API and never carries a protocol upgrade or a trailer, so
 // there is nothing here for those headers to break.
+// newTransport builds the transport used for every upstream call. It clones
+// http.DefaultTransport rather than building a bare &http.Transport{}, so
+// proxy support (env HTTP_PROXY/HTTPS_PROXY/NO_PROXY), the dial and TLS
+// handshake timeouts, and the idle-connection pool all survive; only
+// DisableCompression is overridden. DefaultTransport would otherwise add its
+// own Accept-Encoding: gzip when a request carries none and transparently
+// decompress the reply, and a compressed stream makes the usage tap read
+// zero for every field.
+func newTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DisableCompression = true
+	return transport
+}
+
 func cloneHeader(h http.Header) http.Header {
 	out := make(http.Header, len(h))
 	for k, v := range h {

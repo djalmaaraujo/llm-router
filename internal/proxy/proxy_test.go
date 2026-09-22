@@ -431,3 +431,17 @@ func TestPartialStreamReportsIncompleteUsage(t *testing.T) {
 		t.Error("Complete = true, want false after a mid-stream drop")
 	}
 }
+
+func TestTransportRetainsDefaultBehaviourExceptCompression(t *testing.T) {
+	transport := newTransport()
+
+	if transport.Proxy == nil {
+		t.Error("Proxy = nil, want it cloned from http.DefaultTransport so HTTP_PROXY/HTTPS_PROXY/NO_PROXY still work")
+	}
+	if transport.TLSHandshakeTimeout == 0 {
+		t.Error("TLSHandshakeTimeout = 0, want it cloned from http.DefaultTransport so a stalled handshake cannot hang forever")
+	}
+	if !transport.DisableCompression {
+		t.Error("DisableCompression = false, want true so the upstream never compresses a response the usage tap must scan")
+	}
+}
