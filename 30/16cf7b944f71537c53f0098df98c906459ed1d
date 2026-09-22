@@ -1,0 +1,21 @@
+README.md
+  s_04303831b3d683::t_0e823b2aca0763 34-45
+install.sh
+  s_04303831b3d683::t_82cbd65d6d232b 1-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3016cf7b944f71537c53f0098df98c906459ed1d",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
