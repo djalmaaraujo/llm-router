@@ -77,6 +77,34 @@ func TestNewTurnPromptSkipsATrailingHookSystemMessage(t *testing.T) {
 	}
 }
 
+func TestNewTurnPromptSkipsMultipleTrailingSystemMessages(t *testing.T) {
+	body := decode(t, `{"tools":[{"name":"Read"}],"messages":[
+		{"role":"user","content":[{"type":"text","text":"fix the parser"}]},
+		{"role":"system","content":[{"type":"text","text":"first hook"}]},
+		{"role":"system","content":[{"type":"text","text":"second hook"}]}]}`)
+	if got := NewTurnPrompt(body); got != "fix the parser" {
+		t.Errorf("got %q, want both trailing hook messages skipped", got)
+	}
+}
+
+func TestNewTurnPromptStillIgnoresAToolLoopContinuationBehindATrailingHookMessage(t *testing.T) {
+	body := decode(t, `{"tools":[{"name":"Read"}],"messages":[
+		{"role":"user","content":[{"type":"tool_result","tool_use_id":"x"}]},
+		{"role":"system","content":[{"type":"text","text":"hook additionalContext"}]}]}`)
+	if got := NewTurnPrompt(body); got != "" {
+		t.Errorf("got %q, want empty: skipping the trailing hook message must not turn a tool-loop continuation into a fresh turn", got)
+	}
+}
+
+func TestNewTurnPromptReturnsEmptyWhenEveryMessageIsSystem(t *testing.T) {
+	body := decode(t, `{"tools":[{"name":"Read"}],"messages":[
+		{"role":"system","content":[{"type":"text","text":"first hook"}]},
+		{"role":"system","content":[{"type":"text","text":"second hook"}]}]}`)
+	if got := NewTurnPrompt(body); got != "" {
+		t.Errorf("got %q, want empty: no user message means no turn to route", got)
+	}
+}
+
 func TestNewTurnPromptIgnoresAuxiliaryCalls(t *testing.T) {
 	body := decode(t, `{"messages":[{"role":"user","content":"summarise this"}]}`)
 	if got := NewTurnPrompt(body); got != "" {

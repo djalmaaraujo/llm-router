@@ -56,13 +56,20 @@ func Claude(args []string) int {
 		env = append(env, "ANTHROPIC_MODEL=jev-router")
 	}
 
-	if config.Env("NO_STATUSLINE") == "" && !hasStatusLine() {
+	if shouldAddStatusLine() {
 		if file, err := statusLineSettingsFile(); err == nil {
 			args = append(args, "--settings", file)
 		}
 	}
 
 	return Run(exe, args, env)
+}
+
+// shouldAddStatusLine reports whether llmr-claude should add its own status
+// line: only when the user opted out neither by env var nor by already
+// configuring one themselves.
+func shouldAddStatusLine() bool {
+	return config.Env("NO_STATUSLINE") == "" && !hasStatusLine()
 }
 
 // hasStatusLine reports whether the user already configured a status line, in
