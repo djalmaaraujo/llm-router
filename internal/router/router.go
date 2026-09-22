@@ -17,11 +17,14 @@ type Input struct {
 	Models        []config.Model
 }
 
+// Metrics uses pointers because Jev can omit any score answer. A nil field
+// means "not reported"; a caller must render that as n/a, never as 0.0, since
+// a fabricated zero would read as "very low complexity" in the report.
 type Metrics struct {
-	TaskComplexity    float64
-	ReasoningRequired float64
-	ToolComplexity    float64
-	ContextSize       float64
+	TaskComplexity    *float64
+	ReasoningRequired *float64
+	ToolComplexity    *float64
+	ContextSize       *float64
 }
 
 // Decision carries the exact request and response so the report can be

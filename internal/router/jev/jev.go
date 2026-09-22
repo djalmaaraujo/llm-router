@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"os"
 	"time"
 
 	"github.com/djalmaaraujo/llm-router/internal/config"
@@ -20,12 +22,21 @@ const defaultBaseURL = "https://api.typesafe.ai"
 
 const defaultModel = "jev-latest"
 
+// retryBackoff matches the Node original's initial backoff, and is what
+// TypeSafe advises waiting before retrying a 429 or 529.
+const retryBackoff = 150 * time.Millisecond
+
 // modelID lets the System One model version be pinned. TypeSafe publishes
 // version-scoped limitation pages, so behaviour drifts between versions; an
 // unpinned "jev-latest" would let the router change which model handles a
 // turn without anyone noticing.
+//
+// This reads LLMR_JEV_MODEL directly rather than through config.Env: that
+// helper exists only to keep the Node original's legacy JEV_* names alive
+// through the LLMR_ rename, and JEV_MODEL has no legacy name to preserve.
+// Routing it through config.Env would invent a user-facing JEV_JEV_MODEL.
 func modelID() string {
-	if v := config.Env("JEV_MODEL"); v != "" {
+	if v := os.Getenv("LLMR_JEV_MODEL"); v != "" {
 		return v
 	}
 	return defaultModel
@@ -58,6 +69,22 @@ type result struct {
 	Answers map[string]answer `json:"answers"`
 }
 
+// statusError carries the HTTP status so the retry loop can tell a permanent
+// failure (401 invalid key, 422 validation) from a transient one (429 rate
+// limited, 529 overloaded) apart.
+type statusError struct{ code int }
+
+func (e *statusError) Error() string { return fmt.Sprintf("systemone: http %d", e.code) }
+
+func isRetryable(err error) bool {
+	var se *statusError
+	if errors.As(err, &se) {
+		return se.code == http.StatusTooManyRequests || se.code == 529
+	}
+	var ue *url.Error
+	return errors.As(err, &ue)
+}
+
 func (c *Client) Route(ctx context.Context, in router.Input) (*router.Decision, error) {
 	if len(in.Models) == 0 {
 		return nil, errors.New("no models to choose between")
@@ -66,7 +93,7 @@ func (c *Client) Route(ctx context.Context, in router.Input) (*router.Decision, 
 		// The model catalog already lives in the choice question's criteria
 		// keys; repeating it here would send the same data twice and add
 		// context pollution, which TypeSafe's own limitations page names as
-		// a direct accuracy risk.
+		// a direct accuracy risk: https://docs.typesafe.ai/model-jaggedness/jev-1.13
 		"state": map[string]any{
 			"request": in.Prompt,
 			"session": map[string]any{"current_model": in.Current, "context_tokens": in.ContextTokens},
@@ -83,8 +110,15 @@ func (c *Client) Route(ctx context.Context, in router.Input) (*router.Decision, 
 	var err error
 	for attempt := 0; attempt <= config.Thresholds.JevMaxRetries; attempt++ {
 		res, err = c.post(ctx, body)
-		if err == nil || ctx.Err() != nil {
+		if err == nil {
 			break
+		}
+		if ctx.Err() != nil || !isRetryable(err) || attempt == config.Thresholds.JevMaxRetries {
+			break
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(retryBackoff):
 		}
 	}
 	if err != nil {
@@ -95,7 +129,14 @@ func (c *Client) Route(ctx context.Context, in router.Input) (*router.Decision, 
 	if !ok || pick.Choice == "" {
 		return nil, errors.New("no model answer")
 	}
-	norm := func(name string) float64 { return res.Answers[name].Score / config.ComplexityMaxScore }
+	metric := func(name string) *float64 {
+		a, ok := res.Answers[name]
+		if !ok {
+			return nil
+		}
+		v := a.Score / config.ComplexityMaxScore
+		return &v
+	}
 	ctxSize := float64(in.ContextTokens) / config.ContextWindowTokens
 	if ctxSize > 1 {
 		ctxSize = 1
@@ -104,10 +145,10 @@ func (c *Client) Route(ctx context.Context, in router.Input) (*router.Decision, 
 		Choice:     pick.Choice,
 		Confidence: pick.Confidence,
 		Metrics: router.Metrics{
-			TaskComplexity:    norm("task_complexity"),
-			ReasoningRequired: norm("reasoning_required"),
-			ToolComplexity:    norm("tool_complexity"),
-			ContextSize:       ctxSize,
+			TaskComplexity:    metric("task_complexity"),
+			ReasoningRequired: metric("reasoning_required"),
+			ToolComplexity:    metric("tool_complexity"),
+			ContextSize:       &ctxSize,
 		},
 		Request:  body,
 		Response: res,
@@ -133,7 +174,7 @@ func (c *Client) post(ctx context.Context, body map[string]any) (*result, error)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return nil, fmt.Errorf("systemone: http %d", resp.StatusCode)
+		return nil, &statusError{code: resp.StatusCode}
 	}
 	var out result
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
