@@ -205,22 +205,28 @@ func (h *Handler) RewriteRequest(_ string, body map[string]any) string {
 	}
 
 	h.mu.Lock()
-	if c.tier == "" {
-		c.tier = defaultTier
-		c.model = config.IDOf(defaultTier)
-	}
 	tier, modelID := c.tier, c.model
 	h.mu.Unlock()
 
+	// No pin and no router opinion (policy.Decide returns "" for exactly
+	// that case) lands the request on the default rather than inventing a
+	// pin: the conversation stays unpinned in convo, so the next turn routes
+	// again from scratch instead of inheriting a fiction.
+	applyTier, applyModel := tier, modelID
+	if applyTier == "" {
+		applyTier = defaultTier
+		applyModel = config.IDOf(defaultTier)
+	}
+
 	// The sentinel is not a real model id, so every routed request must be
 	// rewritten, including continuations that reuse the turn's pinned tier.
-	ApplyTier(body, tier, modelID)
+	ApplyTier(body, applyTier, applyModel)
 
 	// Recorded only once the tier is final, so the status on disk always
 	// matches what was actually applied to the request.
 	if pending != nil {
-		pending.Tier = tier
-		pending.Model = modelID
+		pending.Tier = applyTier
+		pending.Model = applyModel
 		state.WriteDecision(writeKey, *pending)
 	}
 

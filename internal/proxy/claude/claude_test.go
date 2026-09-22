@@ -355,6 +355,31 @@ func TestResumedSessionCanMisclassifyTheMainConversationAsASubAgent(t *testing.T
 	}
 }
 
+// Fix round 2: a fresh conversation whose router call fails must land on the
+// default tier, never on the cheapest available one (the inverted fail-open
+// bug fixed in policy.clampToAvailable), and must NOT come away pinned to
+// that landing — the next turn should route again from scratch rather than
+// inherit a fiction.
+func TestFreshConversationWithFailedRouterLandsOnDefaultAndStaysUnpinned(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	h := New(&fakeRouter{err: context.DeadlineExceeded})
+
+	first := body(t, strings.Replace(turn, "%s", "anything at all", 1))
+	h.Hooks().RewriteRequest("/v1/messages", first)
+	if first["model"] != "claude-opus-5" {
+		t.Fatalf("model = %v, want the default tier (opus), not the cheapest available (haiku)", first["model"])
+	}
+
+	second := body(t, `{"model":"jev-router","tools":[{"name":"Read"}],
+		"metadata":{"user_id":"{\"session_id\":\"s1\"}"},
+		"messages":[{"role":"user","content":"anything at all"},
+			{"role":"user","content":"a second fresh turn in the same conversation"}]}`)
+	h.Hooks().RewriteRequest("/v1/messages", second)
+	if second["model"] != "claude-opus-5" {
+		t.Errorf("model = %v, want the default tier again: the first failure must not have pinned haiku", second["model"])
+	}
+}
+
 type routerFunc func(context.Context, router.Input) (*router.Decision, error)
 
 func (f routerFunc) Route(ctx context.Context, in router.Input) (*router.Decision, error) {

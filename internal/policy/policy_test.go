@@ -226,3 +226,20 @@ func TestPassesThroughOnEqualRank(t *testing.T) {
 		t.Errorf("got %+v, want sonnet/jev/no-change, unchanged, horizon 5", out)
 	}
 }
+
+// A fresh conversation with no pin and a failed router call must land on
+// "no opinion", never on the cheapest available tier: RankOf("") is -1, and
+// stepping up from -1 would otherwise land on haiku, inverting fail-open into
+// fail onto the weakest model available.
+func TestAFailedRouterWithNoPinYieldsNoOpinionRatherThanTheCheapestTier(t *testing.T) {
+	in := base()
+	in.Current = ""
+	in.Jev = nil
+	out := Decide(in)
+	if out.Tier != "" {
+		t.Errorf("Tier = %q, want empty: no pin and no router answer means no opinion", out.Tier)
+	}
+	if !strings.Contains(out.Reason, "jev-unavailable") {
+		t.Errorf("Reason = %q, want it to mention jev-unavailable", out.Reason)
+	}
+}

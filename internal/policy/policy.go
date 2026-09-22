@@ -71,6 +71,13 @@ func contains(names []string, name string) bool {
 // stepping up rather than down, so a hard task is never handed to a weaker
 // model, but it never steps up into fable, which bills extra credits.
 func clampToAvailable(tier string, available []string) string {
+	if tier == "" {
+		// "The nearest available tier to nothing" is not a question with an
+		// answer. RankOf("") is -1, and stepping up from -1 would otherwise
+		// land on the cheapest tier — the opposite of the fail-open landing
+		// a missing pin and a missing router answer should produce.
+		return ""
+	}
 	if contains(available, tier) {
 		return tier
 	}
