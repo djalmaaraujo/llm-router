@@ -108,6 +108,25 @@ func TestAllowsTheDowngradeThatPaysForItself(t *testing.T) {
 	}
 }
 
+func TestTargetCarriesTheRouterChoiceOnAHeldDowngrade(t *testing.T) {
+	in := base()
+	in.Jev = sure("haiku")
+	in.CachedTokens = 100_000
+	out := Decide(in)
+	if out.Tier != "sonnet" || out.Target != "haiku" {
+		t.Errorf("got %+v, want Tier sonnet and Target haiku", out)
+	}
+}
+
+func TestTargetIsEmptyWhenTheRouterWasUnavailable(t *testing.T) {
+	in := base()
+	in.Jev = nil
+	out := Decide(in)
+	if out.Target != "" {
+		t.Errorf("Target = %q, want empty when there was no router answer", out.Target)
+	}
+}
+
 func TestRefusesTheDowngradeThatDoesNotPayForItself(t *testing.T) {
 	in := base()
 	in.Jev = sure("haiku")

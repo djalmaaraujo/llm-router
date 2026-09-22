@@ -27,6 +27,7 @@ var pruneOnce sync.Once
 // versions of the router.
 type Status struct {
 	Tier          string          `json:"tier"`
+	Target        string          `json:"target"`
 	Model         string          `json:"model"`
 	Prompt        string          `json:"prompt"`
 	Reason        string          `json:"reason"`

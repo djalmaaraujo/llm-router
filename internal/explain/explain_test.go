@@ -63,6 +63,43 @@ func TestShowsTheCacheArithmeticWhenARebuildWasWeighed(t *testing.T) {
 	}
 }
 
+func TestShowsTheRejectedTierOnAHeldDowngrade(t *testing.T) {
+	got := Render(&state.Status{
+		Tier:          "sonnet",
+		Target:        "haiku",
+		Model:         "claude-sonnet-5",
+		Reason:        "downgrade-not-worth-cache-rebuild/no-change",
+		Rebuild:       0.19,
+		SavingPerTurn: 0.02,
+		BreakEven:     9.5,
+		Horizon:       5,
+	})
+	if !strings.Contains(got, "rebuild on HAIKU") {
+		t.Errorf("report is missing the rejected tier:\n%s", got)
+	}
+	if !strings.Contains(got, "$0.190") {
+		t.Errorf("report is missing the rebuild cost:\n%s", got)
+	}
+}
+
+func TestFallsBackToTheOldWordingWhenTargetIsEmpty(t *testing.T) {
+	got := Render(&state.Status{
+		Tier:          "sonnet",
+		Model:         "claude-sonnet-5",
+		Reason:        "downgrade-not-worth-cache-rebuild/no-change",
+		Rebuild:       0.19,
+		SavingPerTurn: 0.02,
+		BreakEven:     9.5,
+		Horizon:       5,
+	})
+	if !strings.Contains(got, "rebuild cost") {
+		t.Errorf("report is missing the old wording for a status file with no Target:\n%s", got)
+	}
+	if strings.Contains(got, "rebuild on") {
+		t.Errorf("must not render \"rebuild on\" when Target is empty:\n%s", got)
+	}
+}
+
 func TestNilMetricRendersNotAvailableWhileSiblingsStillRender(t *testing.T) {
 	got := Render(&state.Status{
 		Tier: "sonnet", Model: "claude-sonnet-5",

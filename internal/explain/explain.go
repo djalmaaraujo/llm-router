@@ -165,7 +165,11 @@ func Render(s *state.Status) string {
 			verb = "held on"
 		}
 		lines = append(lines, fmt.Sprintf("Decision: %s %s", verb, strings.ToUpper(firstNonEmpty(s.Tier, "unknown"))))
-		lines = append(lines, fmt.Sprintf("  rebuild cost       $%.3f once", s.Rebuild))
+		if s.Target != "" {
+			lines = append(lines, fmt.Sprintf("  rebuild on %-8s$%.3f once", strings.ToUpper(s.Target), s.Rebuild))
+		} else {
+			lines = append(lines, fmt.Sprintf("  rebuild cost       $%.3f once", s.Rebuild))
+		}
 		lines = append(lines, fmt.Sprintf("  saving             $%.3f per turn", s.SavingPerTurn))
 		lines = append(lines, fmt.Sprintf("  pays off in        %.1f turns, horizon is %d", s.BreakEven, s.Horizon))
 	} else {

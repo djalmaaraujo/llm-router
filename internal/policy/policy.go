@@ -29,6 +29,7 @@ type Input struct {
 // show the numbers rather than a reason code.
 type Outcome struct {
 	Tier          string
+	Target        string
 	Reason        string
 	Changed       bool
 	BreakEven     float64
@@ -98,7 +99,7 @@ func Decide(in Input) Outcome {
 		out = config.Thresholds.AssumedOutputTokens
 	}
 
-	settle := func(tier, reason string) Outcome {
+	settle := func(tier, reason, routerTarget string) Outcome {
 		final := clampToAvailable(tier, in.Available)
 		if final == "" {
 			final = in.Current
@@ -109,15 +110,15 @@ func Decide(in Input) Outcome {
 		if final == in.Current {
 			reason += "/no-change"
 		}
-		return Outcome{Tier: final, Reason: reason, Changed: final != in.Current, Horizon: horizon}
+		return Outcome{Tier: final, Target: routerTarget, Reason: reason, Changed: final != in.Current, Horizon: horizon}
 	}
 
 	if override := DetectOverride(in.Prompt); override != "" {
-		return settle(override, "override")
+		return settle(override, "override", "")
 	}
 
 	if in.Jev == nil || config.RankOf(in.Jev.Choice) < 0 {
-		return settle(in.Current, "jev-unavailable")
+		return settle(in.Current, "jev-unavailable", "")
 	}
 
 	target := in.Jev.Choice
@@ -126,14 +127,14 @@ func Decide(in Input) Outcome {
 
 	if in.Jev.Confidence < config.Thresholds.MinConfidence {
 		if targetRank < currentRank {
-			return settle(in.Current, "low-confidence-no-downgrade")
+			return settle(in.Current, "low-confidence-no-downgrade", target)
 		}
 		ceiling := config.RankOf(config.Thresholds.UncertainCeiling)
 		if currentRank > ceiling {
 			ceiling = currentRank
 		}
 		if targetRank > ceiling {
-			return settle(config.TierNames()[ceiling], "low-confidence-capped")
+			return settle(config.TierNames()[ceiling], "low-confidence-capped", target)
 		}
 	}
 
@@ -143,7 +144,7 @@ func Decide(in Input) Outcome {
 	if targetRank > currentRank &&
 		in.CachedTokens > config.Thresholds.BigContextTokens &&
 		in.Jev.Confidence < config.Thresholds.BigContextMinConfidence {
-		return settle(in.Current, "big-context-low-confidence")
+		return settle(in.Current, "big-context-low-confidence", target)
 	}
 
 	if targetRank < currentRank {
@@ -151,18 +152,18 @@ func Decide(in Input) Outcome {
 		to := config.RatesFor(target)
 		turns, ok := cost.BreakEvenTurns(from, to, in.CachedTokens, out)
 		if !ok || turns > float64(horizon) {
-			held := settle(in.Current, "downgrade-not-worth-cache-rebuild")
+			held := settle(in.Current, "downgrade-not-worth-cache-rebuild", target)
 			held.BreakEven = turns
 			held.Rebuild, held.SavingPerTurn = rebuildAndSaving(from, to, in.CachedTokens, out)
 			return held
 		}
-		switched := settle(target, "jev")
+		switched := settle(target, "jev", target)
 		switched.BreakEven = turns
 		switched.Rebuild, switched.SavingPerTurn = rebuildAndSaving(from, to, in.CachedTokens, out)
 		return switched
 	}
 
-	return settle(target, "jev")
+	return settle(target, "jev", target)
 }
 
 // rebuildAndSaving reports the one-off premium for rebuilding the cache on `to`
