@@ -117,7 +117,7 @@ func TestBuffersTheCatalogResponse(t *testing.T) {
 	p, _ := Start(upstream.URL, Hooks{
 		RewritesPath:    func(string) bool { return false },
 		BuffersResponse: func(method, path string) bool { return method == "GET" && path == "/v1/models" },
-		ObserveResponse: func(_ string, body []byte) { seen <- body },
+		ObserveResponse: func(_ string, body []byte) []byte { seen <- body; return nil },
 	})
 	defer p.Close()
 
@@ -126,6 +126,27 @@ func TestBuffersTheCatalogResponse(t *testing.T) {
 	resp.Body.Close()
 	if !strings.Contains(string(<-seen), "claude-opus-5") {
 		t.Error("the catalog must reach ObserveResponse")
+	}
+}
+
+func TestObserveResponseCanRewriteTheBufferedBody(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":[{"id":"claude-opus-5"}]}`))
+	}))
+	defer upstream.Close()
+
+	p, _ := Start(upstream.URL, Hooks{
+		RewritesPath:    func(string) bool { return false },
+		BuffersResponse: func(method, path string) bool { return method == "GET" && path == "/v1/models" },
+		ObserveResponse: func(_ string, body []byte) []byte { return []byte(`{"data":[{"id":"rewritten"}]}`) },
+	})
+	defer p.Close()
+
+	resp, _ := http.Get(p.URL() + "/v1/models")
+	got, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(got), "rewritten") {
+		t.Errorf("body = %s, want the client to receive what ObserveResponse returned", got)
 	}
 }
 

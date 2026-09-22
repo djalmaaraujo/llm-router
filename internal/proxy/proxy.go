@@ -48,8 +48,11 @@ type Hooks struct {
 	// BuffersResponse reports whether a response should be buffered whole and
 	// handed to ObserveResponse instead of streamed.
 	BuffersResponse func(method, path string) bool
-	// ObserveResponse receives a buffered response body.
-	ObserveResponse func(path string, body []byte)
+	// ObserveResponse receives a buffered response body. A non-nil return
+	// replaces what is sent to the client, so a hook can rewrite a catalog
+	// response (adding a picker row, say) rather than merely observe it; a
+	// nil return leaves the original bytes untouched.
+	ObserveResponse func(path string, body []byte) []byte
 }
 
 // Server is a running proxy. Start returns one already listening.
@@ -188,14 +191,16 @@ func cloneHeader(h http.Header) http.Header {
 	return out
 }
 
-func serveBuffered(w http.ResponseWriter, resp *http.Response, path string, observe func(string, []byte)) {
+func serveBuffered(w http.ResponseWriter, resp *http.Response, path string, observe func(string, []byte) []byte) {
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		writeUpstreamError(w, err)
 		return
 	}
 	if observe != nil {
-		observe(path, data)
+		if rewritten := observe(path, data); rewritten != nil {
+			data = rewritten
+		}
 	}
 
 	copyHeader(w.Header(), resp.Header)

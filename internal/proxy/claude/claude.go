@@ -255,12 +255,12 @@ func (h *Handler) ObserveUsage(key string, u proxy.Usage) {
 
 // ObserveResponse keeps the account's real model catalog so the router is
 // offered exact model ids rather than static tier defaults.
-func (h *Handler) ObserveResponse(_ string, body []byte) {
+func (h *Handler) ObserveResponse(_ string, body []byte) []byte {
 	var payload struct {
 		Data []map[string]any `json:"data"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return
+		return nil
 	}
 
 	var entries []map[string]any
@@ -275,6 +275,7 @@ func (h *Handler) ObserveResponse(_ string, body []byte) {
 	h.mu.Lock()
 	h.catalog = entries
 	h.mu.Unlock()
+	return nil
 }
 
 // IsSubAgent reports whether key was registered as a sub-agent conversation.
