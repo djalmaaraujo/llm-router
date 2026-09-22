@@ -1,0 +1,23 @@
+internal/router/router.go
+  s_04303831b3d683::t_f476b27bf09f27 20-22,24-27
+internal/router/jev/jev_test.go
+  s_04303831b3d683::t_14f6a24d37bd2b 8,20-25,37,52,95,111-226
+internal/router/jev/jev.go
+  s_04303831b3d683::t_4a4ed1ec5ab547 13-14,25-28,33-37,39,72-87,96,113,116-122,132-139,148-151,177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "27e491fe34a3bbae82d57f3997d6ca0ca7ed1588",
+  "prompts": {},
+  "sessions": {
+    "s_04303831b3d683": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a3b31af-9ce2-4e6b-9469-825db3e5bf2e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Djalma Araújo <djalma@nossomos.cc>"
+    }
+  }
+}
