@@ -261,8 +261,9 @@ almost nothing. The main conversation is the one holding 100 000+ tokens.
 
 The first routed conversation key seen for a session is the main conversation.
 Any new key under that session afterwards is a sub-agent. Sub-agents route with
-a short horizon and no downgrade brake; the main conversation gets the full
-arithmetic.
+a shorter horizon than the main conversation, which makes their downgrade
+brake stricter, not absent: a short-lived context earns switching back sooner,
+so the brake should let go sooner too.
 
 This is the workable form of the sub-agent idea raised on the upstream issue: a
 proxy cannot make Claude Code spawn a sub-agent, but it can stop treating a
@@ -285,10 +286,15 @@ These are rules for the implementation, not reminders.
 
 **1. Decode with `UseNumber`.** The proxy mutates an undocumented body and must
 return everything else untouched. A plain `map[string]any` decode turns every
-number into `float64`, and `max_tokens: 1000000` goes back on the wire as
-`1e+06`. Every decode of a request or response body uses
-`json.Decoder` with `UseNumber()` set. This is the trap that silently corrupts
-requests.
+number into `float64`, and a large integer does not survive the round trip:
+a 20-digit id comes back as `12345678901234567000`. Every decode of a request
+or response body uses `json.Decoder` with `UseNumber()` set. This is the trap
+that silently corrupts requests.
+
+Measured during implementation, so the test asserts the right thing: `float64`
+does **not** produce `1e+06` for `max_tokens: 1000000` — `encoding/json`'s
+formatter avoids scientific notation in that range, and only `fmt.Sprint` shows
+`1e+06`. Precision loss on large integers is the real failure, not formatting.
 
 **2. Go sorts map keys on marshal.** Node preserves insertion order. The API
 does not care, and Anthropic computes the cache after parsing, over

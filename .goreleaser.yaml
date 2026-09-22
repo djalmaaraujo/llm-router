@@ -1,0 +1,64 @@
+version: 2
+project_name: llm-router
+
+builds:
+  - id: llm-router
+    binary: llm-router
+    main: .
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "llm-router_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-dev"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+homebrew_casks:
+  - name: llm-router
+    repository:
+      owner: djalmaaraujo
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/djalmaaraujo/llm-router"
+    description: "Route each Claude Code or Codex turn to the cheapest model that can do it"
+    commit_author:
+      name: goreleaser-bot
+      email: bot@goreleaser.com
+    custom_block: |
+      binary "llm-router", target: "llmr-claude"
+      binary "llm-router", target: "llmr-codex"
+      binary "llm-router", target: "llmr-explain"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/llm-router"]
+          end
+
+release:
+  github:
+    owner: djalmaaraujo
+    name: llm-router
+  prerelease: auto
